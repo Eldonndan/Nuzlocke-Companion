@@ -1,0 +1,100 @@
+export type AppScreen = "home" | "create-run" | "play";
+
+export type CaptureStatus = "available" | "used" | "failed" | "not-applicable";
+
+export type EmulatorType = "mgba";
+
+export type EmulatorConfig = {
+  type: EmulatorType;
+  executablePath: string;
+  romPath: string;
+  launchArgs?: string[];
+  lastLaunchedProcessId?: number;
+};
+
+export type EmulatorLaunchResult = {
+  processId: number | null;
+};
+
+export type CaptureWindow = {
+  windowId: string;
+  title: string;
+  processId: number;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  isVisible: boolean;
+};
+
+export type CapturedFrame = {
+  imageDataUrl: string;
+  width: number;
+  height: number;
+  capturedAt: number;
+};
+
+export type LiveCaptureFrame = {
+  rgbaData: string;
+  width: number;
+  height: number;
+  capturedAt: number;
+};
+
+export type CaptureSessionStatus = {
+  isActive: boolean;
+  engine: string;
+  windowId?: string | null;
+  requestedFps?: number | null;
+  effectiveFps: number;
+  framesCaptured: number;
+  lastFrameAt?: number | null;
+  lastError?: string | null;
+};
+
+export type OverlayAction =
+  | { type: "decrease-lives" }
+  | { type: "increase-lives" }
+  | { type: "cycle-capture-status" }
+  | { type: "set-route"; routeName: string }
+  | { type: "set-level-cap"; levelCap: number }
+  | { type: "close-edit-mode" };
+
+export type PokemonSlot = {
+  id: string;
+  nickname: string;
+  species?: string;
+  level?: number;
+  avatarLabel?: string;
+  spriteUrl?: string | null;
+};
+
+export type Badge = {
+  id: string;
+  name: string;
+  leaderName?: string;
+  levelCap?: number;
+  obtained: boolean;
+};
+
+export type Route = {
+  id: string;
+  name: string;
+};
+
+export type RunState = {
+  id: string;
+  name: string;
+  platform: string;
+  gamePackId?: string;
+  gameName: string;
+  challengeType: string;
+  emulatorConfig?: EmulatorConfig;
+  captureWindow?: CaptureWindow;
+  lives: number;
+  levelCap: number;
+  currentRoute: Route;
+  captureStatus: CaptureStatus;
+  team: PokemonSlot[];
+  badges: Badge[];
+};
