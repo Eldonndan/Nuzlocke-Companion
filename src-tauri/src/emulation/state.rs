@@ -3,11 +3,15 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use super::input::{
+    clear_joypad_buttons, input_info, reset_input_state, set_joypad_button,
+};
 use super::libretro_host::LibretroHost;
 use super::types::{
     InternalCoreInfo, InternalEnvironmentInfo, InternalFrameInfo, InternalFrameLoopInfo,
-    InternalFrameSnapshot, InternalLoadedGameInfo, InternalRuntimePhase, InternalRuntimeStatus,
-    PrepareInternalRuntimeRequest, RunFrameLoopRequest,
+    InternalFrameSnapshot, InternalInputInfo, InternalLoadedGameInfo, InternalRuntimePhase,
+    InternalRuntimeStatus, PrepareInternalRuntimeRequest, RunFrameLoopRequest,
+    SetJoypadButtonRequest,
 };
 use super::video::{latest_frame_snapshot_rgba, reset_video_state};
 
@@ -40,6 +44,23 @@ impl InternalEmulationState {
         latest_frame_snapshot_rgba()
     }
 
+    pub fn set_joypad_button(
+        &self,
+        request: SetJoypadButtonRequest,
+    ) -> Result<InternalRuntimeStatus, String> {
+        let input_info = set_joypad_button(request.button, request.pressed)?;
+        self.update_status(|status| {
+            status.input_info = input_info;
+        })
+    }
+
+    pub fn clear_joypad_buttons(&self) -> Result<InternalRuntimeStatus, String> {
+        let input_info = clear_joypad_buttons()?;
+        self.update_status(|status| {
+            status.input_info = input_info;
+        })
+    }
+
     pub fn prepare(
         &self,
         request: PrepareInternalRuntimeRequest,
@@ -47,6 +68,7 @@ impl InternalEmulationState {
         self.ensure_frame_loop_inactive()?;
         // Preparing a new runtime configuration invalidates any loaded core.
         self.clear_host()?;
+        reset_input_state();
         reset_video_state();
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::Prepared;
@@ -60,6 +82,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.input_info = InternalInputInfo::default();
             status.is_core_loaded = false;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -83,6 +106,7 @@ impl InternalEmulationState {
             *loaded_host = Some(host);
         }
 
+        reset_input_state();
         reset_video_state();
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::CoreLoaded;
@@ -92,6 +116,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.input_info = InternalInputInfo::default();
             status.is_core_loaded = true;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -118,6 +143,7 @@ impl InternalEmulationState {
             host.environment_info()
         };
 
+        reset_input_state();
         reset_video_state();
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::CoreInitialized;
@@ -126,6 +152,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.input_info = InternalInputInfo::default();
             status.is_core_loaded = true;
             status.is_core_initialized = true;
             status.is_rom_loaded = false;
@@ -149,6 +176,7 @@ impl InternalEmulationState {
             host.environment_info()
         };
 
+        reset_input_state();
         reset_video_state();
         self.update_status(|status| {
             // The dynamic library remains loaded after deinit; only the core lifecycle
@@ -159,6 +187,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.input_info = InternalInputInfo::default();
             status.is_core_loaded = true;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -197,7 +226,7 @@ impl InternalEmulationState {
 
     pub fn step_frame(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
-        let (frame_info, environment_info) = {
+        let (frame_info, environment_info, input_info) = {
             let mut loaded_host = self.host.lock().map_err(|_| {
                 "No se pudo avanzar un frame en el host Libretro interno.".to_string()
             })?;
@@ -215,10 +244,11 @@ impl InternalEmulationState {
 
             let frame_info = host.step_frame()?;
             let environment_info = host.environment_info();
-            (frame_info, environment_info)
+            let input_info = input_info()?;
+            (frame_info, environment_info, input_info)
         };
 
-        self.mark_frame_stepped(frame_info, environment_info)
+        self.mark_frame_stepped(frame_info, environment_info, input_info)
     }
 
     pub fn run_frame_loop(
@@ -237,10 +267,11 @@ impl InternalEmulationState {
 
         let result = self.run_frame_loop_inner(&loop_config);
         let final_result = match result {
-            Ok((latest_frame, environment_info, frames_run, cancelled)) => self
+            Ok((latest_frame, environment_info, input_info, frames_run, cancelled)) => self
                 .mark_frame_loop_finished(
                     latest_frame,
                     environment_info,
+                    input_info,
                     &loop_config,
                     frames_run,
                     cancelled,
@@ -299,6 +330,7 @@ impl InternalEmulationState {
             host.environment_info()
         };
 
+        reset_input_state();
         reset_video_state();
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::CoreInitialized;
@@ -307,6 +339,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.input_info = InternalInputInfo::default();
             status.is_core_loaded = true;
             status.is_core_initialized = true;
             status.is_rom_loaded = false;
@@ -327,6 +360,7 @@ impl InternalEmulationState {
     pub fn stop(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
         self.clear_host()?;
+        reset_input_state();
         reset_video_state();
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::Stopped;
@@ -336,6 +370,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.input_info = InternalInputInfo::default();
             status.is_core_loaded = false;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -347,6 +382,7 @@ impl InternalEmulationState {
     pub fn reset_idle(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
         self.clear_host()?;
+        reset_input_state();
         reset_video_state();
         self.update_status(|status| {
             *status = InternalRuntimeStatus::default();
@@ -374,6 +410,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.input_info = InternalInputInfo::default();
             status.is_core_loaded = true;
             status.is_core_initialized = true;
             status.is_rom_loaded = true;
@@ -386,10 +423,12 @@ impl InternalEmulationState {
         &self,
         frame_info: InternalFrameInfo,
         environment_info: InternalEnvironmentInfo,
+        input_info: InternalInputInfo,
     ) -> Result<InternalRuntimeStatus, String> {
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::RomLoaded;
             status.environment_info = Some(environment_info);
+            status.input_info = input_info;
             status.stepped_frames = frame_info.frame_number;
             status.latest_frame = Some(frame_info);
             status.is_core_loaded = true;
@@ -403,7 +442,16 @@ impl InternalEmulationState {
     fn run_frame_loop_inner(
         &self,
         loop_config: &FrameLoopConfig,
-    ) -> Result<(Option<InternalFrameInfo>, InternalEnvironmentInfo, u64, bool), String> {
+    ) -> Result<
+        (
+            Option<InternalFrameInfo>,
+            InternalEnvironmentInfo,
+            InternalInputInfo,
+            u64,
+            bool,
+        ),
+        String,
+    > {
         // The host lock is held for the bounded batch so lifecycle commands cannot
         // unload/deinit the core while `retro_run` is executing. Cancellation uses
         // atomics and does not need this lock.
@@ -439,12 +487,14 @@ impl InternalEmulationState {
             let frame_start = Instant::now();
             let frame_info = host.step_frame()?;
             let environment_info = host.environment_info();
+            let input_info = input_info()?;
             frames_run += 1;
 
             self.update_status(|status| {
                 status.latest_frame = Some(frame_info.clone());
                 status.stepped_frames = frame_info.frame_number;
                 status.environment_info = Some(environment_info);
+                status.input_info = input_info;
                 status.is_running = true;
                 if let Some(frame_loop) = status.frame_loop.as_mut() {
                     frame_loop.frames_run = frames_run;
@@ -465,7 +515,13 @@ impl InternalEmulationState {
             return Err("No frames were executed by the frame loop.".into());
         }
 
-        Ok((latest_frame, host.environment_info(), frames_run, cancelled))
+        Ok((
+            latest_frame,
+            host.environment_info(),
+            input_info()?,
+            frames_run,
+            cancelled,
+        ))
     }
 
     fn mark_frame_loop_started(
@@ -491,6 +547,7 @@ impl InternalEmulationState {
         &self,
         latest_frame: Option<InternalFrameInfo>,
         environment_info: InternalEnvironmentInfo,
+        input_info: InternalInputInfo,
         loop_config: &FrameLoopConfig,
         frames_run: u64,
         cancelled: bool,
@@ -498,6 +555,7 @@ impl InternalEmulationState {
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::RomLoaded;
             status.environment_info = Some(environment_info);
+            status.input_info = input_info;
             if let Some(latest_frame) = latest_frame {
                 status.stepped_frames = latest_frame.frame_number;
                 status.latest_frame = Some(latest_frame);

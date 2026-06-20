@@ -3,10 +3,36 @@ import {
   getLatestInternalRuntimeFrameSnapshot,
   runInternalRuntimeFrameLoop,
   stepInternalRuntimeFrame,
+  clearInternalRuntimeJoypadButtons,
+  setInternalRuntimeJoypadButton,
+  type InternalJoypadButton,
   type InternalFrameSnapshot,
+  type InternalInputInfo,
 } from "../../utils/internalRuntimeCommands";
 
 type PreviewStatus = "idle" | "loading" | "ready" | "empty" | "error";
+
+const joypadButtons: Array<{ button: InternalJoypadButton; label: string }> = [
+  { button: "up", label: "Arriba" },
+  { button: "down", label: "Abajo" },
+  { button: "left", label: "Izquierda" },
+  { button: "right", label: "Derecha" },
+  { button: "a", label: "A" },
+  { button: "b", label: "B" },
+  { button: "start", label: "Start" },
+  { button: "select", label: "Select" },
+  { button: "l", label: "L" },
+  { button: "r", label: "R" },
+  { button: "x", label: "X" },
+  { button: "y", label: "Y" },
+];
+
+function getJoypadButtonLabel(button: InternalJoypadButton) {
+  return (
+    joypadButtons.find((candidate) => candidate.button === button)?.label ??
+    button
+  );
+}
 
 function getErrorMessage(error: unknown) {
   if (typeof error === "string") {
@@ -23,8 +49,11 @@ function getErrorMessage(error: unknown) {
 export function InternalRuntimeFramePreview() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [snapshot, setSnapshot] = useState<InternalFrameSnapshot | null>(null);
+  const [inputInfo, setInputInfo] = useState<InternalInputInfo | null>(null);
   const [status, setStatus] = useState<PreviewStatus>("idle");
   const [message, setMessage] = useState("Sin fotograma renderizado.");
+
+  const pressedButtons = new Set(inputInfo?.pressedButtons ?? []);
 
   const renderSnapshot = (nextSnapshot: InternalFrameSnapshot | null) => {
     if (!nextSnapshot) {
@@ -81,7 +110,8 @@ export function InternalRuntimeFramePreview() {
     setMessage("Ejecutando un fotograma...");
 
     try {
-      await stepInternalRuntimeFrame();
+      const nextStatus = await stepInternalRuntimeFrame();
+      setInputInfo(nextStatus.inputInfo);
       renderSnapshot(await getLatestInternalRuntimeFrameSnapshot());
     } catch (error) {
       setStatus("error");
@@ -94,8 +124,46 @@ export function InternalRuntimeFramePreview() {
     setMessage("Ejecutando 60 fotogramas...");
 
     try {
-      await runInternalRuntimeFrameLoop({ maxFrames: 60, targetFps: 60 });
+      const nextStatus = await runInternalRuntimeFrameLoop({
+        maxFrames: 60,
+        targetFps: 60,
+      });
+      setInputInfo(nextStatus.inputInfo);
       renderSnapshot(await getLatestInternalRuntimeFrameSnapshot());
+    } catch (error) {
+      setStatus("error");
+      setMessage(getErrorMessage(error));
+    }
+  };
+
+  const toggleJoypadButton = async (button: InternalJoypadButton) => {
+    const pressed = !pressedButtons.has(button);
+    setStatus("loading");
+    setMessage(pressed ? "Presionando botón..." : "Soltando botón...");
+
+    try {
+      const nextStatus = await setInternalRuntimeJoypadButton({
+        button,
+        pressed,
+      });
+      setInputInfo(nextStatus.inputInfo);
+      setStatus("ready");
+      setMessage(pressed ? "Botón presionado." : "Botón soltado.");
+    } catch (error) {
+      setStatus("error");
+      setMessage(getErrorMessage(error));
+    }
+  };
+
+  const clearJoypadButtons = async () => {
+    setStatus("loading");
+    setMessage("Limpiando botones...");
+
+    try {
+      const nextStatus = await clearInternalRuntimeJoypadButtons();
+      setInputInfo(nextStatus.inputInfo);
+      setStatus("ready");
+      setMessage("Botones limpiados.");
     } catch (error) {
       setStatus("error");
       setMessage(getErrorMessage(error));
@@ -153,6 +221,46 @@ export function InternalRuntimeFramePreview() {
             </>
           ) : null}
         </div>
+      </div>
+      <div className="internal-frame-preview__input">
+        <strong>Control Joypad</strong>
+        <div className="internal-frame-preview__input-buttons">
+          {joypadButtons.map(({ button, label }) => (
+            <button
+              key={button}
+              className={
+                pressedButtons.has(button)
+                  ? "primary-button"
+                  : "secondary-button"
+              }
+              type="button"
+              onClick={() => void toggleJoypadButton(button)}
+              disabled={status === "loading"}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void clearJoypadButtons()}
+            disabled={status === "loading"}
+          >
+            Limpiar botones
+          </button>
+        </div>
+        <span>
+          {inputInfo?.pressedButtons.length
+            ? `Presionados: ${inputInfo.pressedButtons
+                .map(getJoypadButtonLabel)
+                .join(", ")}`
+            : "Sin botones presionados"}
+        </span>
+        <span>
+          {`Sondeos: ${inputInfo?.pollCount ?? 0} · Consultas: ${
+            inputInfo?.stateQueryCount ?? 0
+          }`}
+        </span>
       </div>
     </section>
   );

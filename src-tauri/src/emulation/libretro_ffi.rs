@@ -5,6 +5,7 @@ use std::ptr;
 use libloading::Library;
 
 use super::environment::environment_callback;
+use super::input::{input_poll_callback, input_state_callback};
 use super::types::InternalCoreInfo;
 use super::video::video_refresh_callback;
 
@@ -124,8 +125,9 @@ impl LibretroCoreSymbols {
         // libretro.h. The environment callback is a minimal frontend implementation
         // backed by controlled global state for the single active core supported today;
         // it handles incoming pointers with null checks internally. The video callback
-        // copies transient frame bytes into Rust-owned memory, while audio and input
-        // callbacks remain no-op stubs until real pipelines are implemented.
+        // copies transient frame bytes into Rust-owned memory, input callbacks read
+        // controlled global Joypad state for the single active core, and audio
+        // callbacks remain no-op stubs until the real audio pipeline is implemented.
         unsafe {
             (self.retro_set_environment)(environment_callback);
             (self.retro_set_video_refresh)(video_refresh_callback);
@@ -220,16 +222,4 @@ unsafe extern "C" fn audio_sample_batch_callback(data: *const i16, frames: usize
     // Report all frames as consumed so cores do not retry audio that this spike
     // intentionally discards until the real audio pipeline exists.
     frames
-}
-
-unsafe extern "C" fn input_poll_callback() {}
-
-unsafe extern "C" fn input_state_callback(
-    port: c_uint,
-    device: c_uint,
-    index: c_uint,
-    id: c_uint,
-) -> i16 {
-    let _ = (port, device, index, id);
-    0
 }

@@ -4,7 +4,7 @@ use super::libretro_host::{LibretroHost, LibretroHostConfig};
 use super::state::InternalEmulationState;
 use super::types::{
     InternalFrameSnapshot, InternalRuntimeStatus, PrepareInternalRuntimeRequest,
-    RunFrameLoopRequest,
+    RunFrameLoopRequest, SetJoypadButtonRequest,
 };
 
 const NOT_IMPLEMENTED: &str = "Internal Libretro runtime is not implemented yet.";
@@ -165,6 +165,21 @@ pub fn internal_runtime_cancel_frame_loop(
     state: State<'_, InternalEmulationState>,
 ) -> Result<InternalRuntimeStatus, String> {
     state.cancel_frame_loop()
+}
+
+#[tauri::command]
+pub fn internal_runtime_set_joypad_button(
+    state: State<'_, InternalEmulationState>,
+    request: SetJoypadButtonRequest,
+) -> Result<InternalRuntimeStatus, String> {
+    state.set_joypad_button(request)
+}
+
+#[tauri::command]
+pub fn internal_runtime_clear_joypad_buttons(
+    state: State<'_, InternalEmulationState>,
+) -> Result<InternalRuntimeStatus, String> {
+    state.clear_joypad_buttons()
 }
 
 #[tauri::command]

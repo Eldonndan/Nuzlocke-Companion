@@ -34,6 +34,7 @@ pub struct InternalRuntimeStatus {
     pub latest_frame: Option<InternalFrameInfo>,
     pub stepped_frames: u64,
     pub frame_loop: Option<InternalFrameLoopInfo>,
+    pub input_info: InternalInputInfo,
     pub is_core_loaded: bool,
     pub is_core_initialized: bool,
     pub is_rom_loaded: bool,
@@ -55,6 +56,7 @@ impl Default for InternalRuntimeStatus {
             latest_frame: None,
             stepped_frames: 0,
             frame_loop: None,
+            input_info: InternalInputInfo::default(),
             is_core_loaded: false,
             is_core_initialized: false,
             is_rom_loaded: false,
@@ -78,6 +80,30 @@ pub struct PrepareInternalRuntimeRequest {
 pub struct RunFrameLoopRequest {
     pub max_frames: u32,
     pub target_fps: Option<u32>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InternalJoypadButton {
+    A,
+    B,
+    Start,
+    Select,
+    Up,
+    Down,
+    Left,
+    Right,
+    L,
+    R,
+    X,
+    Y,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetJoypadButtonRequest {
+    pub button: InternalJoypadButton,
+    pub pressed: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -143,4 +169,12 @@ pub struct InternalFrameLoopInfo {
     pub max_frames: Option<u32>,
     pub frames_run: u64,
     pub last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalInputInfo {
+    pub pressed_buttons: Vec<InternalJoypadButton>,
+    pub poll_count: u64,
+    pub state_query_count: u64,
 }

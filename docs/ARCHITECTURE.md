@@ -254,6 +254,17 @@ The internal runtime can now expose the latest captured video frame through an e
 
 This is still a debug transport, not the final renderer. There is no automatic streaming, no Rust-to-React frame events, no final gameplay loop, no real audio, and no real input.
 
+### Libretro Minimal Joypad Input
+
+The internal runtime now has a minimal Joypad input path for debug testing:
+
+- `input_poll_callback` and `input_state_callback` are connected to controlled internal state instead of no-op stubs.
+- The state supports Libretro Joypad port 0 for A, B, Start, Select, D-pad, L, R, X, and Y.
+- Tauri commands can press, release, or clear buttons without touching the core lifecycle.
+- The debug frame preview includes manual Joypad controls so a button can be held while stepping one frame or running a bounded frame batch.
+
+Input still assumes one active core at a time. There is no global keyboard capture, physical gamepad support, rebinding UI, or final gameplay input system yet.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

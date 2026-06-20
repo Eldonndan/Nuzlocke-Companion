@@ -55,6 +55,31 @@ export type InternalFrameSnapshot = {
   rgbaByteLen: number;
 };
 
+export type InternalJoypadButton =
+  | "a"
+  | "b"
+  | "start"
+  | "select"
+  | "up"
+  | "down"
+  | "left"
+  | "right"
+  | "l"
+  | "r"
+  | "x"
+  | "y";
+
+export type SetJoypadButtonRequest = {
+  button: InternalJoypadButton;
+  pressed: boolean;
+};
+
+export type InternalInputInfo = {
+  pressedButtons: InternalJoypadButton[];
+  pollCount: number;
+  stateQueryCount: number;
+};
+
 export type RunFrameLoopRequest = {
   maxFrames: number;
   targetFps?: number | null;
@@ -81,6 +106,7 @@ export type InternalRuntimeStatus = {
   latestFrame?: InternalFrameInfo | null;
   steppedFrames: number;
   frameLoop?: InternalFrameLoopInfo | null;
+  inputInfo: InternalInputInfo;
   isCoreLoaded: boolean;
   isCoreInitialized: boolean;
   isRomLoaded: boolean;
@@ -143,6 +169,18 @@ export function runInternalRuntimeFrameLoop(request: RunFrameLoopRequest) {
 
 export function cancelInternalRuntimeFrameLoop() {
   return invoke<InternalRuntimeStatus>("internal_runtime_cancel_frame_loop");
+}
+
+export function setInternalRuntimeJoypadButton(
+  request: SetJoypadButtonRequest,
+) {
+  return invoke<InternalRuntimeStatus>("internal_runtime_set_joypad_button", {
+    request,
+  });
+}
+
+export function clearInternalRuntimeJoypadButtons() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_clear_joypad_buttons");
 }
 
 export function startInternalRuntime() {

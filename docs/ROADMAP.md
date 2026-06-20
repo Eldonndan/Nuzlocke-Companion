@@ -89,7 +89,8 @@ Status:
 - Added explicit single-frame stepping with `retro_run` and internal frame metadata capture.
 - Added a bounded, cancelable frame-loop command for controlled batches.
 - Added explicit RGBA snapshot transport and a manual debug canvas preview.
-- Final continuous gameplay loop, efficient frame transport, real video/audio/input pipelines, and saves remain out of this spike.
+- Added minimal Joypad input callbacks and debug controls for manual testing.
+- Final continuous gameplay loop, efficient frame transport, physical input, real audio pipelines, and saves remain out of this spike.
 
 ## Phase 5: Video Pipeline
 
