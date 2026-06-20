@@ -17,6 +17,14 @@ struct RetroSystemInfo {
     block_extract: bool,
 }
 
+#[repr(C)]
+pub struct RetroGameInfo {
+    pub path: *const c_char,
+    pub data: *const c_void,
+    pub size: usize,
+    pub meta: *const c_char,
+}
+
 type RetroApiVersion = unsafe extern "C" fn() -> c_uint;
 type RetroGetSystemInfo = unsafe extern "C" fn(*mut RetroSystemInfo);
 pub type RetroEnvironment = unsafe extern "C" fn(cmd: c_uint, data: *mut c_void) -> bool;
@@ -35,6 +43,8 @@ type RetroSetInputPoll = unsafe extern "C" fn(callback: RetroInputPoll);
 type RetroSetInputState = unsafe extern "C" fn(callback: RetroInputState);
 type RetroInit = unsafe extern "C" fn();
 type RetroDeinit = unsafe extern "C" fn();
+type RetroLoadGame = unsafe extern "C" fn(game: *const RetroGameInfo) -> bool;
+type RetroUnloadGame = unsafe extern "C" fn();
 
 pub struct LibretroCoreSymbols {
     retro_api_version: RetroApiVersion,
@@ -47,6 +57,8 @@ pub struct LibretroCoreSymbols {
     retro_set_input_state: RetroSetInputState,
     retro_init: RetroInit,
     retro_deinit: RetroDeinit,
+    retro_load_game: RetroLoadGame,
+    retro_unload_game: RetroUnloadGame,
 }
 
 impl LibretroCoreSymbols {
@@ -69,6 +81,8 @@ impl LibretroCoreSymbols {
                 retro_set_input_state: load_symbol(library, b"retro_set_input_state\0")?,
                 retro_init: load_symbol(library, b"retro_init\0")?,
                 retro_deinit: load_symbol(library, b"retro_deinit\0")?,
+                retro_load_game: load_symbol(library, b"retro_load_game\0")?,
+                retro_unload_game: load_symbol(library, b"retro_unload_game\0")?,
             })
         }
     }
@@ -130,6 +144,21 @@ impl LibretroCoreSymbols {
         // once for each successful `retro_init`.
         unsafe {
             (self.retro_deinit)();
+        }
+    }
+
+    pub fn load_game(&self, game_info: &RetroGameInfo) -> bool {
+        // SAFETY: `game_info` is a valid C-compatible struct whose path and optional
+        // data pointers are owned by `LoadedGame` in `LibretroHost` and kept alive for
+        // at least as long as the content remains loaded.
+        unsafe { (self.retro_load_game)(game_info as *const RetroGameInfo) }
+    }
+
+    pub fn unload_game(&self) {
+        // SAFETY: `LibretroHost` only calls this after a successful `retro_load_game`
+        // and clears its loaded-content state immediately after the core unloads it.
+        unsafe {
+            (self.retro_unload_game)();
         }
     }
 }

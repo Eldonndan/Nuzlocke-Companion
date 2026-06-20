@@ -201,6 +201,19 @@ The callback uses a single global environment state because Libretro callbacks d
 
 The callback still does not load ROMs, execute frames, render video, play audio, or read real input.
 
+### Libretro Content Loading
+
+The internal host can now load and unload user-selected local content through Libretro:
+
+- Resolves `retro_load_game` and `retro_unload_game` from the loaded core.
+- Builds a C-compatible `retro_game_info` for the prepared ROM path.
+- Respects `coreInfo.needFullpath`: full-path cores receive only the ROM path, while buffer-capable cores receive an in-memory ROM buffer.
+- Validates that the ROM path is non-empty, exists, points to a file, and matches the core's declared extensions when available.
+- Keeps the ROM path `CString` and optional ROM byte buffer alive while content is loaded.
+- Moves runtime status to `rom-loaded` after `retro_load_game` succeeds.
+
+This stage still does not call `retro_run`, execute frames, render video, output audio, map real input, create saves, or implement compressed content handling.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

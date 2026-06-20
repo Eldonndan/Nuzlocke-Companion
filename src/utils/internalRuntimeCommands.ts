@@ -30,6 +30,13 @@ export type InternalEnvironmentInfo = {
   supportNoGame: boolean;
 };
 
+export type InternalLoadedGameInfo = {
+  romPath: string;
+  extension?: string | null;
+  sizeBytes?: number | null;
+  loadedWithFullpath: boolean;
+};
+
 export type InternalRuntimeStatus = {
   phase: InternalRuntimePhase;
   core?: string | null;
@@ -38,6 +45,7 @@ export type InternalRuntimeStatus = {
   saveDirectory?: string | null;
   coreInfo?: InternalCoreInfo | null;
   environmentInfo?: InternalEnvironmentInfo | null;
+  loadedGame?: InternalLoadedGameInfo | null;
   isCoreLoaded: boolean;
   isCoreInitialized: boolean;
   isRomLoaded: boolean;
@@ -72,6 +80,14 @@ export function initInternalRuntimeCore() {
 
 export function deinitInternalRuntimeCore() {
   return invoke<InternalRuntimeStatus>("internal_runtime_deinit_core");
+}
+
+export function loadInternalRuntimeGame() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_load_game");
+}
+
+export function unloadInternalRuntimeGame() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_unload_game");
 }
 
 export function startInternalRuntime() {

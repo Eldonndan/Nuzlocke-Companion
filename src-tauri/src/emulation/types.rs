@@ -30,6 +30,7 @@ pub struct InternalRuntimeStatus {
     pub save_directory: Option<String>,
     pub core_info: Option<InternalCoreInfo>,
     pub environment_info: Option<InternalEnvironmentInfo>,
+    pub loaded_game: Option<InternalLoadedGameInfo>,
     pub is_core_loaded: bool,
     pub is_core_initialized: bool,
     pub is_rom_loaded: bool,
@@ -47,6 +48,7 @@ impl Default for InternalRuntimeStatus {
             save_directory: None,
             core_info: None,
             environment_info: None,
+            loaded_game: None,
             is_core_loaded: false,
             is_core_initialized: false,
             is_rom_loaded: false,
@@ -86,4 +88,13 @@ pub struct InternalEnvironmentInfo {
     pub core_assets_directory: Option<String>,
     pub variable_count: usize,
     pub support_no_game: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalLoadedGameInfo {
+    pub rom_path: String,
+    pub extension: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub loaded_with_fullpath: bool,
 }

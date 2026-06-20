@@ -98,6 +98,32 @@ pub fn internal_runtime_deinit_core(
 }
 
 #[tauri::command]
+pub fn internal_runtime_load_game(
+    state: State<'_, InternalEmulationState>,
+) -> Result<InternalRuntimeStatus, String> {
+    match state.load_game() {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            state.mark_error(&error)?;
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn internal_runtime_unload_game(
+    state: State<'_, InternalEmulationState>,
+) -> Result<InternalRuntimeStatus, String> {
+    match state.unload_game() {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            state.mark_error(&error)?;
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
 pub fn internal_runtime_start(
     state: State<'_, InternalEmulationState>,
 ) -> Result<InternalRuntimeStatus, String> {
