@@ -8,6 +8,9 @@ import type {
   HostRect,
 } from "../shared/types";
 
+// Legacy external runtime commands. These invoke the current mGBA process,
+// overlay, docking, and capture bridge while internal Libretro remains future work.
+
 export function selectEmulatorExecutable() {
   return invoke<string | null>("select_emulator_executable");
 }

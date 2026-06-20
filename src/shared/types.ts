@@ -4,13 +4,33 @@ export type CaptureStatus = "available" | "used" | "failed" | "not-applicable";
 
 export type EmulatorType = "mgba";
 
-export type EmulatorConfig = {
-  type: EmulatorType;
+export type RuntimeMode = "legacy-external" | "internal-libretro";
+
+export type LegacyExternalRuntimeConfig = {
+  mode: "legacy-external";
+  emulatorType: EmulatorType;
   executablePath: string;
   romPath: string;
   launchArgs?: string[];
   lastLaunchedProcessId?: number;
+  /** @deprecated Old saved runs used `type`; prefer `emulatorType`. */
+  type?: EmulatorType;
 };
+
+export type InternalLibretroRuntimeConfig = {
+  mode: "internal-libretro";
+  core: "mgba";
+  corePath: string;
+  romPath: string;
+  saveDirectory?: string;
+};
+
+export type RuntimeConfig =
+  | LegacyExternalRuntimeConfig
+  | InternalLibretroRuntimeConfig;
+
+/** @deprecated Use LegacyExternalRuntimeConfig or RuntimeConfig instead. */
+export type EmulatorConfig = LegacyExternalRuntimeConfig;
 
 export type EmulatorLaunchResult = {
   processId: number | null;
@@ -110,6 +130,8 @@ export type RunState = {
   gamePackId?: string;
   gameName: string;
   challengeType: string;
+  runtimeConfig?: RuntimeConfig;
+  /** @deprecated Use runtimeConfig instead. */
   emulatorConfig?: EmulatorConfig;
   captureWindow?: CaptureWindow;
   lives: number;

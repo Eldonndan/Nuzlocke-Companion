@@ -1,113 +1,194 @@
-# Architecture - Nuzlocke Companion
+# Architecture
 
-## Recommended stack
+Nuzlocke Companion is a Tauri desktop app with a React and TypeScript frontend and a Rust native layer. The current repository is a working prototype for a player-facing Nuzlocke layout plus external mGBA integration. The target architecture moves the project toward an internal emulation frontend specialized for Pokemon Nuzlocke runs.
 
-- Tauri
-- React
-- TypeScript
-- pnpm
-- Rust commands for native Windows integration
+## Current Architecture
 
-## Final product direction
+### React UI
 
-Nuzlocke Companion is a desktop Nuzlocke companion that launches mGBA and, on Windows, docks the real mGBA window inside the main gameplay viewport.
+The frontend owns the visible play experience:
 
-The recommended play flow is `Modo acoplado`:
+- Home and create-run screens.
+- Main play screen.
+- Gameplay frame.
+- Team panel.
+- Lives, badges, level cap, current route, and capture status controls.
+- Quick edit workflows.
+- Emulator configuration panel.
+- Overlay screen.
 
-1. Find an already open mGBA window or launch mGBA with the user's configured ROM.
-2. Detect the mGBA top-level window.
-3. Reparent the mGBA HWND into the gameplay frame of the main Tauri window.
-4. Resize the child window to match the gameplay rectangle.
-5. Keep mGBA as the real renderer and input target, so gameplay FPS and keyboard/controller input stay native.
-6. Keep the React UI around the gameplay area for Equipo, Vidas, Medallas, Ruta actual, Captura and Limite de nivel.
+The UI is Spanish-facing and stores run state locally for the MVP.
 
-Overlay mode remains available as a secondary path. Experimental capture remains available for debugging, but it is not the recommended product experience.
+### Run Tracking and Data
 
-## Core modules
+Current run data is represented in `src/shared/types.ts` and initialized from game pack/sample data:
 
-### App Shell
+- `RunState`.
+- `PokemonSlot`.
+- `Badge`.
+- `Route`.
+- `CaptureStatus`.
+- `EmulatorConfig`.
+- Capture and docked-window metadata.
 
-Handles:
+The useful product base is the run tracking model: team, lives, badges, route, level cap, capture status, game pack selection, and local persistence.
 
-- home screen
-- create run flow
-- main configuration/play screen
-- emulator configuration
-- recommended docked launch flow
-- secondary overlay launch flow
-- experimental capture controls
+### External Emulator Bridge
 
-### Game State Core
+The current `EmulatorConfig` model assumes an external mGBA executable and a local ROM path. The frontend calls Tauri commands through `src/utils/emulatorCommands.ts`.
 
-Stores:
+Rust commands in `src-tauri/src/lib.rs` currently handle:
 
-- selected game
-- platform
-- challenge type
-- emulator configuration
-- detected capture window metadata
-- current team
-- lives
-- badges
-- current route
-- capture status
-- level cap
+- Selecting an emulator executable.
+- Selecting a ROM file.
+- Launching mGBA as a child process.
+- Detecting likely mGBA windows.
+- Docking an external mGBA HWND into the gameplay area on Windows.
+- Resizing, focusing, positioning, and undocking that external window.
+- Showing and hiding the overlay.
+- Experimental still-frame and live capture.
 
-State is persisted locally for MVP.
+### Capture and Overlay
 
-### Docked Emulator Bridge
+There are two secondary paths:
 
-Rust commands provide the Windows-first docked mode:
+- Overlay mode: a transparent Tauri window at `index.html?overlay=1`, with click-through support and global hotkeys.
+- Capture mode: GDI still capture and Windows Graphics Capture frame streaming into the WebView.
 
-- `find_mgba_windows`
-- `launch_emulator`
-- `detect_emulator_window`
-- `dock_emulator_window`
-- `resize_docked_emulator`
-- `undock_emulator_window`
-- `focus_emulator_window`
+These paths are useful for learning and fallback behavior, but they are no longer the target product architecture.
 
-The Win32 implementation uses HWND operations such as `SetParent`, `SetWindowLongPtrW`, `SetWindowPos`, `GetWindowRect` and `GetParent`. Docking changes the emulator from a top-level window into a child window of the main app, then restores the previous parent/style/position when the user desacopla the game or leaves the screen.
+## Target Architecture
 
-### Overlay Window
+The target product is a specialized Pokemon Nuzlocke emulation frontend. It should host gameplay inside the app and place Nuzlocke state next to it.
 
-The overlay is a separate transparent Tauri window opened at `index.html?overlay=1`.
+### React UI
 
-It renders the same player-facing HUD elements, usually for secondary/testing use:
+React remains responsible for:
 
-- Equipo
-- Vidas
-- Medallas
-- Ruta actual
-- Captura
-- Limite de nivel
+- Run creation and selection.
+- Player-facing gameplay layout.
+- Team, routes, deaths, badges, rules, progress, and status panels.
+- Manual controls.
+- Future social/share surfaces.
+- Runtime status and configuration screens.
 
-In normal overlay play it ignores cursor events so mGBA can receive input. In edit mode it accepts input and shows compact controls.
+React should not own emulator timing, core execution, audio, or raw input timing.
 
-### Experimental Capture
+### Tauri Desktop Shell
 
-The capture pipeline remains available as secondary/debug functionality:
+Tauri remains the desktop shell:
 
-- GDI still-frame capture
-- Windows Graphics Capture session
-- canvas rendering in the main window
+- Window management.
+- Local filesystem access through controlled commands.
+- Native dialogs.
+- Event bridge between React and Rust.
+- Packaging.
 
-It is not the recommended gameplay path because frame transport through React/WebView can add latency and uneven frame pacing.
+### Rust Native Emulation Host
 
-## Future plan
+The Rust layer should become the internal emulation host:
 
-- Improve docked mode DPI handling and client-area cropping.
-- Add support for more emulators and platforms.
-- Add a visual layout editor for HUD placement.
-- Add configurable hotkeys.
-- Improve overlay click-through fallback where needed.
-- Keep capture experimental for diagnostics or future rendering research.
-- Save watcher/parser only after the manual emulator flow is stable.
+- Runtime lifecycle: create, load, run, pause, reset, stop.
+- Core lifecycle: load core, unload core, report core capabilities.
+- ROM lifecycle: load a legal local ROM selected by the user.
+- Video frame production.
+- Audio output.
+- Input handling.
+- Save and runtime data management.
 
-## Out of scope
+This host should expose a stable command/event API to the frontend. It should be designed so legacy external mode and target internal mode can coexist temporarily.
 
-- ROM downloading or bundled ROMs.
-- Bundled emulators or BIOS files.
-- Save parsing for now.
-- OBS, Twitch, YouTube integrations.
-- Death log, box management, item tracker, notes, logs, or timeline.
+### Libretro Core
+
+The initial internal core target is mGBA via Libretro for GB, GBC, and GBA.
+
+The app should not bundle ROMs, BIOS files, copyrighted assets, or emulator binaries unless a future packaging decision explicitly allows legally redistributable components. The first integration should assume user-provided local files.
+
+### Run Tracking / Data Layer
+
+Run tracking should be separated from runtime execution:
+
+- Run state: player-facing Nuzlocke progress.
+- Runtime state: emulator/core/ROM/session state.
+- Game pack data: game identity, platform, routes, badges, level caps, and future Pokemon metadata.
+- Persistence: local-first, per-run storage.
+
+This separation is the next major refactor. `EmulatorConfig` should evolve into a general runtime configuration that can represent both legacy external mode and future internal Libretro mode.
+
+### Runtime Model
+
+The code now uses `RuntimeConfig` as the forward-compatible runtime configuration model.
+
+Supported runtime modes:
+
+- `legacy-external`: the current mode. It launches or detects an external mGBA process, can dock the mGBA window, can show the overlay, and can use experimental window capture.
+- `internal-libretro`: the future mode. It will load a Libretro core inside Nuzlocke Companion and render gameplay in the app. This mode is represented in types only and is not implemented yet.
+
+`RunState.runtimeConfig` is the preferred field for new and migrated runs. `RunState.emulatorConfig` remains temporarily as a deprecated compatibility field for old local saves and current legacy external UI components.
+
+The migration path is gradual:
+
+1. New runs store `runtimeConfig`.
+2. Old runs with only `emulatorConfig` are interpreted as `legacy-external`.
+3. Legacy external code remains available while the internal Libretro host is designed.
+4. Future work can add the native emulation host without deleting the fallback mode first.
+
+### Future Social / Share Layer
+
+Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:
+
+- Shareable run summaries.
+- Exported progress cards.
+- Optional social presence.
+- Community run templates.
+
+These should remain separate from emulator execution and local save management.
+
+## Legacy External Emulator Mode
+
+The current external emulator mode can remain temporarily as a fallback while internal emulation is explored.
+
+Legacy external mode includes:
+
+- mGBA executable path.
+- ROM path passed to external mGBA.
+- Window detection by PID/title.
+- Windows HWND docking.
+- Overlay window.
+- Experimental GDI and Windows Graphics Capture.
+- Global overlay hotkeys.
+
+This mode should be labeled as legacy or experimental in documentation and future UI copy. It should not drive the long-term architecture.
+
+## Target Internal Emulation Mode
+
+The desired flow is:
+
+1. User creates a run.
+2. User selects a legal local ROM.
+3. Nuzlocke Companion loads the appropriate core.
+4. Nuzlocke Companion renders the game inside the app.
+5. Nuzlocke Companion tracks run state next to the game.
+
+This flow should make the app feel like a focused Pokemon Nuzlocke frontend rather than a capture layer around another emulator window.
+
+## Module Direction
+
+Recommended future module boundaries:
+
+- `runtime`: shared TypeScript types for runtime modes and session state.
+- `run`: Nuzlocke run state, persistence, and game pack data.
+- `emulation_host`: Rust-side internal runtime host.
+- `legacy_external_emulator`: Rust and TypeScript bridge for current external mGBA mode.
+- `ui`: React screens and components.
+
+These boundaries are conceptual for now. This documentation change does not implement them.
+
+## Non-Goals for the Current Preparation Work
+
+- No Libretro implementation.
+- No new dependencies.
+- No ROM loading inside the app.
+- No behavior change.
+- No large refactor.
+- No deletion of the current external emulator, capture, or overlay code.

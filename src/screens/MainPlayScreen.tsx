@@ -52,6 +52,12 @@ import {
   loadSavedRun,
   saveRun,
 } from "../utils/runStorage";
+import {
+  createDefaultLegacyExternalRuntimeConfig,
+  getRunRuntimeConfig,
+  isLegacyExternalRuntime,
+  withRunRuntimeConfig,
+} from "../utils/runtimeConfig";
 
 type MainPlayScreenProps = {
   run: RunState;
@@ -69,6 +75,8 @@ const captureStatusOrder: CaptureStatus[] = [
 
 const fpsOptions: CaptureFps[] = [30, 60];
 const overlayLayoutStorageKey = "nuzlocke-companion.overlay-layout";
+const internalLibretroNotImplementedMessage =
+  "El runtime interno Libretro todavía no está implementado.";
 
 type OverlayLayout = {
   x: number;
@@ -90,15 +98,6 @@ function getNextLevelCap(badges: Badge[]) {
 
   const nextBadge = badgesWithCaps.find((badge) => !badge.obtained);
   return nextBadge?.levelCap ?? badgesWithCaps[badgesWithCaps.length - 1].levelCap;
-}
-
-function createEmptyEmulatorConfig(): EmulatorConfig {
-  return {
-    type: "mgba",
-    executablePath: "",
-    romPath: "",
-    launchArgs: [],
-  };
 }
 
 function wait(milliseconds: number) {
@@ -180,10 +179,24 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
 
   const editingPokemon =
     editingSlotIndex === null ? null : runState.team[editingSlotIndex];
-  const emulatorConfig = runState.emulatorConfig ?? createEmptyEmulatorConfig();
-  const hasEmulatorConfigured = Boolean(
+  const runtimeConfig = getRunRuntimeConfig(runState);
+  const isLegacyRuntime = isLegacyExternalRuntime(runtimeConfig);
+  const emulatorConfig = isLegacyRuntime
+    ? runtimeConfig
+    : createDefaultLegacyExternalRuntimeConfig();
+  const hasEmulatorConfigured = isLegacyRuntime && Boolean(
     emulatorConfig.executablePath && emulatorConfig.romPath,
   );
+
+  const ensureLegacyExternalRuntime = () => {
+    if (isLegacyRuntime) {
+      return true;
+    }
+
+    setSessionStatus(internalLibretroNotImplementedMessage);
+    setOverlayStatus(internalLibretroNotImplementedMessage);
+    return false;
+  };
 
   const getGameplayHostRect = (): HostRect | null => {
     const gameplayElement = gameplayScreenRef.current;
@@ -345,8 +358,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     void hideOverlay();
     void undockCurrentGame();
     setRunState((currentRun) => ({
-      ...currentRun,
-      emulatorConfig: config,
+      ...withRunRuntimeConfig(currentRun, config),
       captureWindow: undefined,
     }));
     setWindowStatus("Ventana de juego sin detectar");
@@ -541,6 +553,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const detectConfiguredWindow = async () => {
+    if (!ensureLegacyExternalRuntime()) {
+      return;
+    }
+
     const processId = emulatorConfig.lastLaunchedProcessId;
 
     if (!processId) {
@@ -552,6 +568,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const startGameSession = async () => {
+    if (!ensureLegacyExternalRuntime()) {
+      return;
+    }
+
     if (!hasEmulatorConfigured) {
       setSessionStatus("Configura el emulador para jugar");
       setIsEmulatorPanelOpen(true);
@@ -570,12 +590,11 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       );
 
       setRunState((currentRun) => ({
-        ...currentRun,
-        captureWindow: undefined,
-        emulatorConfig: {
+        ...withRunRuntimeConfig(currentRun, {
           ...emulatorConfig,
           lastLaunchedProcessId: result.processId ?? undefined,
-        },
+        }),
+        captureWindow: undefined,
       }));
 
       if (!result.processId) {
@@ -606,6 +625,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const startDockedSession = async () => {
+    if (!ensureLegacyExternalRuntime()) {
+      return;
+    }
+
     await stopNativeCapture("");
     await hideOverlay();
     setSessionStatus("Preparando modo acoplado...");
@@ -700,12 +723,11 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       );
 
       const dockedRunState: RunState = {
-        ...runState,
-        captureWindow: dockTargetWindow,
-        emulatorConfig: {
+        ...withRunRuntimeConfig(runState, {
           ...emulatorConfig,
           lastLaunchedProcessId,
-        },
+        }),
+        captureWindow: dockTargetWindow,
       };
 
       setDockedWindow(dockedInfo);
@@ -727,6 +749,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const startOverlaySession = async () => {
+    if (!ensureLegacyExternalRuntime()) {
+      return;
+    }
+
     await stopNativeCapture("");
     setSessionStatus("Preparando modo overlay...");
     setOverlayStatus("Buscando mGBA abierto...");
@@ -837,12 +863,11 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
 
       const layout = loadOverlayLayout();
       const overlayRunState: RunState = {
-        ...runState,
-        captureWindow,
-        emulatorConfig: {
+        ...withRunRuntimeConfig(runState, {
           ...emulatorConfig,
           lastLaunchedProcessId,
-        },
+        }),
+        captureWindow,
       };
 
       await runOverlayStep("Posicionando ventanas", async () => {
@@ -887,6 +912,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const captureDetectedWindowFrame = async () => {
+    if (!ensureLegacyExternalRuntime()) {
+      return;
+    }
+
     if (!runState.captureWindow) {
       setFrameStatus("Detecta una ventana antes de capturar.");
       return;
@@ -897,6 +926,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const chooseEmulator = async () => {
+    if (!ensureLegacyExternalRuntime()) {
+      return;
+    }
+
     try {
       const selectedPath = await selectEmulatorExecutable();
       if (selectedPath) {
@@ -911,6 +944,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const chooseRom = async () => {
+    if (!ensureLegacyExternalRuntime()) {
+      return;
+    }
+
     try {
       const selectedPath = await selectRomFile();
       if (selectedPath) {

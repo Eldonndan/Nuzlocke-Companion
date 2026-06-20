@@ -3,6 +3,7 @@ import {
   getGamePackByGameName,
 } from "../data/gamePacks";
 import type { Badge, PokemonSlot, RunState } from "../shared/types";
+import { normalizeLegacyExternalRuntimeConfig } from "./runtimeConfig";
 
 export type CreateRunValues = {
   name: string;
@@ -27,15 +28,11 @@ export function createRunState(values: CreateRunValues): RunState {
     gamePackId: gamePack?.id,
     gameName: values.gameName,
     challengeType: values.challengeType,
-    emulatorConfig:
-      values.emulatorPath || values.romPath
-        ? {
-            type: "mgba",
-            executablePath: values.emulatorPath ?? "",
-            romPath: values.romPath ?? "",
-            launchArgs: values.launchArgs ?? [],
-          }
-        : undefined,
+    runtimeConfig: normalizeLegacyExternalRuntimeConfig({
+      executablePath: values.emulatorPath ?? "",
+      romPath: values.romPath ?? "",
+      launchArgs: values.launchArgs ?? [],
+    }),
     lives: values.lives,
     levelCap: values.levelCap,
     currentRoute: {

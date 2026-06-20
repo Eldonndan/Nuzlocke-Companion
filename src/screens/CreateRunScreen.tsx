@@ -48,7 +48,8 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
     defaultPack?.defaultInitialLevelCap ?? 5,
   );
   const [emulatorConfig, setEmulatorConfig] = useState<EmulatorConfig>({
-    type: "mgba",
+    mode: "legacy-external",
+    emulatorType: "mgba",
     executablePath: "",
     romPath: "",
     launchArgs: [],
