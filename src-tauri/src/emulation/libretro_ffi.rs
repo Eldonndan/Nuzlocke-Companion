@@ -4,6 +4,7 @@ use std::ptr;
 
 use libloading::Library;
 
+use super::environment::environment_callback;
 use super::types::InternalCoreInfo;
 
 #[repr(C)]
@@ -18,7 +19,7 @@ struct RetroSystemInfo {
 
 type RetroApiVersion = unsafe extern "C" fn() -> c_uint;
 type RetroGetSystemInfo = unsafe extern "C" fn(*mut RetroSystemInfo);
-type RetroEnvironment = unsafe extern "C" fn(cmd: c_uint, data: *mut c_void) -> bool;
+pub type RetroEnvironment = unsafe extern "C" fn(cmd: c_uint, data: *mut c_void) -> bool;
 type RetroVideoRefresh =
     unsafe extern "C" fn(data: *const c_void, width: c_uint, height: c_uint, pitch: usize);
 type RetroAudioSample = unsafe extern "C" fn(left: i16, right: i16);
@@ -162,11 +163,6 @@ fn c_string_to_owned(value: *const c_char) -> Option<String> {
     } else {
         Some(text)
     }
-}
-
-unsafe extern "C" fn environment_callback(cmd: c_uint, data: *mut c_void) -> bool {
-    let _ = (cmd, data);
-    false
 }
 
 unsafe extern "C" fn video_refresh_callback(

@@ -2,8 +2,17 @@ use std::path::Path;
 
 use libloading::Library;
 
+use super::environment::{
+    configure_environment, environment_info, reset_environment, LibretroEnvironmentConfig,
+};
 use super::libretro_ffi::LibretroCoreSymbols;
-use super::types::InternalCoreInfo;
+use super::types::{InternalCoreInfo, InternalEnvironmentInfo};
+
+pub struct LibretroHostConfig {
+    pub core_path: String,
+    pub rom_path: String,
+    pub save_directory: Option<String>,
+}
 
 pub struct LibretroHost {
     _library: Library,
@@ -13,14 +22,14 @@ pub struct LibretroHost {
 }
 
 impl LibretroHost {
-    pub fn load_core(core_path: &str) -> Result<Self, String> {
-        let core_path = core_path.trim();
+    pub fn load_core(config: LibretroHostConfig) -> Result<Self, String> {
+        let core_path = config.core_path.trim().to_string();
 
         if core_path.is_empty() {
             return Err("Core path cannot be empty.".into());
         }
 
-        if !Path::new(core_path).exists() {
+        if !Path::new(&core_path).exists() {
             return Err("Core file was not found.".into());
         }
 
@@ -28,10 +37,15 @@ impl LibretroHost {
         // initialization code may run and symbols may not match expected ABIs. This
         // spike only opens a user-selected local path and immediately validates the
         // minimal libretro symbols before exposing owned metadata to safe Rust code.
-        let library = unsafe { Library::new(core_path) }
+        let library = unsafe { Library::new(&core_path) }
             .map_err(|error| format!("Could not load Libretro core library: {error}"))?;
         let symbols = LibretroCoreSymbols::load(&library)?;
         let core_info = symbols.read_core_info();
+        configure_environment(LibretroEnvironmentConfig {
+            core_path: core_path.clone(),
+            rom_path: config.rom_path,
+            save_directory: config.save_directory,
+        });
 
         Ok(Self {
             _library: library,
@@ -43,6 +57,10 @@ impl LibretroHost {
 
     pub fn core_info(&self) -> InternalCoreInfo {
         self.core_info.clone()
+    }
+
+    pub fn environment_info(&self) -> InternalEnvironmentInfo {
+        environment_info()
     }
 
     pub fn init_core(&mut self) -> Result<(), String> {
@@ -74,6 +92,7 @@ impl LibretroHost {
 impl Drop for LibretroHost {
     fn drop(&mut self) {
         let _ = self.deinit_core();
+        reset_environment();
     }
 }
 

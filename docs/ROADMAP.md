@@ -84,6 +84,7 @@ Status:
 
 - Started with dynamic core loading and static metadata inspection only.
 - Added no-op frontend callbacks plus `retro_init` / `retro_deinit` lifecycle support.
+- Added a minimal environment callback for pixel format, directories, variables, and no-game support.
 - ROM loading, frame execution, real video/audio/input pipelines, and saves remain out of this spike.
 
 ## Phase 5: Video Pipeline

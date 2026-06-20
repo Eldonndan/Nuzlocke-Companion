@@ -185,6 +185,22 @@ The host tracks initialization so `retro_init` is not called twice and `retro_de
 
 This stage still does not load ROMs, call `retro_load_game`, call `retro_run`, render video, output audio, or map input.
 
+### Libretro Environment Callback
+
+The internal host now installs a minimal environment callback instead of returning `false` for every Libretro environment command.
+
+Supported environment behavior:
+
+- Stores requested pixel format from `RETRO_ENVIRONMENT_SET_PIXEL_FORMAT`.
+- Responds to system, save, content, and core assets directory queries when paths are available from the prepared runtime config.
+- Accepts legacy `RETRO_ENVIRONMENT_SET_VARIABLES` core options and returns default values through `RETRO_ENVIRONMENT_GET_VARIABLE`.
+- Supports `RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE` with a simple one-shot update flag.
+- Stores `RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME`.
+
+The callback uses a single global environment state because Libretro callbacks do not include frontend user data. This is acceptable for the current one-core-at-a-time MVP direction and should be revisited if NC ever supports multiple simultaneous internal sessions.
+
+The callback still does not load ROMs, execute frames, render video, play audio, or read real input.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

@@ -20,6 +20,16 @@ export type InternalCoreInfo = {
   blockExtract: boolean;
 };
 
+export type InternalEnvironmentInfo = {
+  pixelFormat?: string | null;
+  systemDirectory?: string | null;
+  saveDirectory?: string | null;
+  contentDirectory?: string | null;
+  coreAssetsDirectory?: string | null;
+  variableCount: number;
+  supportNoGame: boolean;
+};
+
 export type InternalRuntimeStatus = {
   phase: InternalRuntimePhase;
   core?: string | null;
@@ -27,6 +37,7 @@ export type InternalRuntimeStatus = {
   romPath?: string | null;
   saveDirectory?: string | null;
   coreInfo?: InternalCoreInfo | null;
+  environmentInfo?: InternalEnvironmentInfo | null;
   isCoreLoaded: boolean;
   isCoreInitialized: boolean;
   isRomLoaded: boolean;

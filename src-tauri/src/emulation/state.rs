@@ -2,7 +2,8 @@ use std::sync::Mutex;
 
 use super::libretro_host::LibretroHost;
 use super::types::{
-    InternalCoreInfo, InternalRuntimePhase, InternalRuntimeStatus, PrepareInternalRuntimeRequest,
+    InternalCoreInfo, InternalEnvironmentInfo, InternalRuntimePhase, InternalRuntimeStatus,
+    PrepareInternalRuntimeRequest,
 };
 
 #[derive(Default)]
@@ -32,6 +33,7 @@ impl InternalEmulationState {
             status.rom_path = Some(request.rom_path);
             status.save_directory = request.save_directory;
             status.core_info = None;
+            status.environment_info = None;
             status.is_core_loaded = false;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -44,6 +46,7 @@ impl InternalEmulationState {
         &self,
         host: LibretroHost,
         core_info: InternalCoreInfo,
+        environment_info: InternalEnvironmentInfo,
     ) -> Result<InternalRuntimeStatus, String> {
         {
             let mut loaded_host = self
@@ -56,6 +59,7 @@ impl InternalEmulationState {
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::CoreLoaded;
             status.core_info = Some(core_info);
+            status.environment_info = Some(environment_info);
             status.is_core_loaded = true;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -65,7 +69,7 @@ impl InternalEmulationState {
     }
 
     pub fn init_loaded_core(&self) -> Result<InternalRuntimeStatus, String> {
-        {
+        let environment_info = {
             let mut loaded_host = self
                 .host
                 .lock()
@@ -77,10 +81,13 @@ impl InternalEmulationState {
             if !host.is_initialized() {
                 host.init_core()?;
             }
-        }
+
+            host.environment_info()
+        };
 
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::CoreInitialized;
+            status.environment_info = Some(environment_info);
             status.is_core_loaded = true;
             status.is_core_initialized = true;
             status.is_rom_loaded = false;
@@ -90,7 +97,7 @@ impl InternalEmulationState {
     }
 
     pub fn deinit_loaded_core(&self) -> Result<InternalRuntimeStatus, String> {
-        let is_core_loaded = {
+        let environment_info = {
             let mut loaded_host = self
                 .host
                 .lock()
@@ -100,14 +107,15 @@ impl InternalEmulationState {
             };
 
             host.deinit_core()?;
-            true
+            host.environment_info()
         };
 
         self.update_status(|status| {
             // The dynamic library remains loaded after deinit; only the core lifecycle
             // moves back from initialized to loaded.
             status.phase = InternalRuntimePhase::CoreLoaded;
-            status.is_core_loaded = is_core_loaded;
+            status.environment_info = Some(environment_info);
+            status.is_core_loaded = true;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
             status.is_running = false;
@@ -129,6 +137,7 @@ impl InternalEmulationState {
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::Stopped;
             status.core_info = None;
+            status.environment_info = None;
             status.is_core_loaded = false;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;

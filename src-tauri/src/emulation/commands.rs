@@ -1,6 +1,6 @@
 use tauri::State;
 
-use super::libretro_host::LibretroHost;
+use super::libretro_host::{LibretroHost, LibretroHostConfig};
 use super::state::InternalEmulationState;
 use super::types::{InternalRuntimeStatus, PrepareInternalRuntimeRequest};
 
@@ -53,10 +53,16 @@ pub fn internal_runtime_load_core(
         return Err(message.into());
     }
 
-    match LibretroHost::load_core(core_path) {
+    let rom_path = status.rom_path.clone().unwrap_or_default();
+    match LibretroHost::load_core(LibretroHostConfig {
+        core_path: core_path.to_string(),
+        rom_path,
+        save_directory: status.save_directory.clone(),
+    }) {
         Ok(host) => {
             let core_info = host.core_info();
-            state.mark_core_loaded(host, core_info)
+            let environment_info = host.environment_info();
+            state.mark_core_loaded(host, core_info, environment_info)
         }
         Err(error) => {
             state.mark_error(&error)?;
