@@ -27,6 +27,14 @@ pub fn reset_video_state() {
     }
 }
 
+pub fn prepare_video_frame_capture() {
+    let state = video_state();
+    if let Ok(mut state) = state.lock() {
+        state.latest_frame = None;
+        state.last_error = None;
+    }
+}
+
 pub fn latest_frame_info() -> Result<Option<InternalFrameInfo>, String> {
     let state = video_state();
     state

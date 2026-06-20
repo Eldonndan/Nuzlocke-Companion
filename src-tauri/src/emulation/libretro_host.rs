@@ -12,7 +12,9 @@ use super::libretro_ffi::{LibretroCoreSymbols, RetroGameInfo};
 use super::types::{
     InternalCoreInfo, InternalEnvironmentInfo, InternalFrameInfo, InternalLoadedGameInfo,
 };
-use super::video::{latest_frame_info, reset_video_state, take_video_error};
+use super::video::{
+    latest_frame_info, prepare_video_frame_capture, reset_video_state, take_video_error,
+};
 
 pub struct LibretroHostConfig {
     pub core_path: String,
@@ -136,7 +138,7 @@ impl LibretroHost {
             return Err("A ROM must be loaded before stepping a frame.".into());
         }
 
-        reset_video_state();
+        prepare_video_frame_capture();
         self.symbols.run_frame();
 
         if let Some(error) = take_video_error()? {
