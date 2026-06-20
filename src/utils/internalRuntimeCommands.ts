@@ -37,6 +37,16 @@ export type InternalLoadedGameInfo = {
   loadedWithFullpath: boolean;
 };
 
+export type InternalFrameInfo = {
+  frameNumber: number;
+  width: number;
+  height: number;
+  pitch: number;
+  byteLen: number;
+  pixelFormat?: string | null;
+  isDuplicate: boolean;
+};
+
 export type InternalRuntimeStatus = {
   phase: InternalRuntimePhase;
   core?: string | null;
@@ -46,6 +56,8 @@ export type InternalRuntimeStatus = {
   coreInfo?: InternalCoreInfo | null;
   environmentInfo?: InternalEnvironmentInfo | null;
   loadedGame?: InternalLoadedGameInfo | null;
+  latestFrame?: InternalFrameInfo | null;
+  steppedFrames: number;
   isCoreLoaded: boolean;
   isCoreInitialized: boolean;
   isRomLoaded: boolean;
@@ -88,6 +100,10 @@ export function loadInternalRuntimeGame() {
 
 export function unloadInternalRuntimeGame() {
   return invoke<InternalRuntimeStatus>("internal_runtime_unload_game");
+}
+
+export function stepInternalRuntimeFrame() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_step_frame");
 }
 
 export function startInternalRuntime() {

@@ -31,6 +31,8 @@ pub struct InternalRuntimeStatus {
     pub core_info: Option<InternalCoreInfo>,
     pub environment_info: Option<InternalEnvironmentInfo>,
     pub loaded_game: Option<InternalLoadedGameInfo>,
+    pub latest_frame: Option<InternalFrameInfo>,
+    pub stepped_frames: u64,
     pub is_core_loaded: bool,
     pub is_core_initialized: bool,
     pub is_rom_loaded: bool,
@@ -49,6 +51,8 @@ impl Default for InternalRuntimeStatus {
             core_info: None,
             environment_info: None,
             loaded_game: None,
+            latest_frame: None,
+            stepped_frames: 0,
             is_core_loaded: false,
             is_core_initialized: false,
             is_rom_loaded: false,
@@ -97,4 +101,16 @@ pub struct InternalLoadedGameInfo {
     pub extension: Option<String>,
     pub size_bytes: Option<u64>,
     pub loaded_with_fullpath: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalFrameInfo {
+    pub frame_number: u64,
+    pub width: u32,
+    pub height: u32,
+    pub pitch: usize,
+    pub byte_len: usize,
+    pub pixel_format: Option<String>,
+    pub is_duplicate: bool,
 }

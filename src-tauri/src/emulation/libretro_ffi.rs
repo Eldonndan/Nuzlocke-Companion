@@ -6,6 +6,7 @@ use libloading::Library;
 
 use super::environment::environment_callback;
 use super::types::InternalCoreInfo;
+use super::video::video_refresh_callback;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -45,6 +46,7 @@ type RetroInit = unsafe extern "C" fn();
 type RetroDeinit = unsafe extern "C" fn();
 type RetroLoadGame = unsafe extern "C" fn(game: *const RetroGameInfo) -> bool;
 type RetroUnloadGame = unsafe extern "C" fn();
+type RetroRun = unsafe extern "C" fn();
 
 pub struct LibretroCoreSymbols {
     retro_api_version: RetroApiVersion,
@@ -59,6 +61,7 @@ pub struct LibretroCoreSymbols {
     retro_deinit: RetroDeinit,
     retro_load_game: RetroLoadGame,
     retro_unload_game: RetroUnloadGame,
+    retro_run: RetroRun,
 }
 
 impl LibretroCoreSymbols {
@@ -83,6 +86,7 @@ impl LibretroCoreSymbols {
                 retro_deinit: load_symbol(library, b"retro_deinit\0")?,
                 retro_load_game: load_symbol(library, b"retro_load_game\0")?,
                 retro_unload_game: load_symbol(library, b"retro_unload_game\0")?,
+                retro_run: load_symbol(library, b"retro_run\0")?,
             })
         }
     }
@@ -119,8 +123,9 @@ impl LibretroCoreSymbols {
         // SAFETY: These setters install static callbacks with signatures matching
         // libretro.h. The environment callback is a minimal frontend implementation
         // backed by controlled global state for the single active core supported today;
-        // it handles incoming pointers with null checks internally. Video, audio, and
-        // input callbacks remain no-op stubs until real pipelines are implemented.
+        // it handles incoming pointers with null checks internally. The video callback
+        // copies transient frame bytes into Rust-owned memory, while audio and input
+        // callbacks remain no-op stubs until real pipelines are implemented.
         unsafe {
             (self.retro_set_environment)(environment_callback);
             (self.retro_set_video_refresh)(video_refresh_callback);
@@ -161,6 +166,15 @@ impl LibretroCoreSymbols {
             (self.retro_unload_game)();
         }
     }
+
+    pub fn run_frame(&self) {
+        // SAFETY: `LibretroHost` only calls this after a core is initialized and game
+        // content is loaded. This advances exactly one Libretro frame and relies on
+        // the installed callbacks to copy any transient video data immediately.
+        unsafe {
+            (self.retro_run)();
+        }
+    }
 }
 
 unsafe fn load_symbol<T>(library: &Library, symbol_name: &[u8]) -> Result<T, String>
@@ -195,15 +209,6 @@ fn c_string_to_owned(value: *const c_char) -> Option<String> {
     } else {
         Some(text)
     }
-}
-
-unsafe extern "C" fn video_refresh_callback(
-    data: *const c_void,
-    width: c_uint,
-    height: c_uint,
-    pitch: usize,
-) {
-    let _ = (data, width, height, pitch);
 }
 
 unsafe extern "C" fn audio_sample_callback(left: i16, right: i16) {

@@ -9,7 +9,10 @@ use super::environment::{
     configure_environment, environment_info, reset_environment, LibretroEnvironmentConfig,
 };
 use super::libretro_ffi::{LibretroCoreSymbols, RetroGameInfo};
-use super::types::{InternalCoreInfo, InternalEnvironmentInfo, InternalLoadedGameInfo};
+use super::types::{
+    InternalCoreInfo, InternalEnvironmentInfo, InternalFrameInfo, InternalLoadedGameInfo,
+};
+use super::video::{latest_frame_info, reset_video_state, take_video_error};
 
 pub struct LibretroHostConfig {
     pub core_path: String,
@@ -124,6 +127,25 @@ impl LibretroHost {
         Ok(info)
     }
 
+    pub fn step_frame(&mut self) -> Result<InternalFrameInfo, String> {
+        if !self.initialized {
+            return Err("Libretro core must be initialized before stepping a frame.".into());
+        }
+
+        if !self.is_game_loaded() {
+            return Err("A ROM must be loaded before stepping a frame.".into());
+        }
+
+        reset_video_state();
+        self.symbols.run_frame();
+
+        if let Some(error) = take_video_error()? {
+            return Err(error);
+        }
+
+        latest_frame_info()?.ok_or_else(|| "No video frame was produced by retro_run.".to_string())
+    }
+
     pub fn unload_game(&mut self) -> Result<(), String> {
         if !self.is_game_loaded() {
             return Ok(());
@@ -142,6 +164,7 @@ impl LibretroHost {
 impl Drop for LibretroHost {
     fn drop(&mut self) {
         let _ = self.deinit_core();
+        reset_video_state();
         reset_environment();
     }
 }

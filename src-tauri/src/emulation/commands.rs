@@ -124,6 +124,19 @@ pub fn internal_runtime_unload_game(
 }
 
 #[tauri::command]
+pub fn internal_runtime_step_frame(
+    state: State<'_, InternalEmulationState>,
+) -> Result<InternalRuntimeStatus, String> {
+    match state.step_frame() {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            state.mark_error(&error)?;
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
 pub fn internal_runtime_start(
     state: State<'_, InternalEmulationState>,
 ) -> Result<InternalRuntimeStatus, String> {

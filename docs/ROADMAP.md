@@ -86,7 +86,8 @@ Status:
 - Added no-op frontend callbacks plus `retro_init` / `retro_deinit` lifecycle support.
 - Added a minimal environment callback for pixel format, directories, variables, and no-game support.
 - Added basic `retro_load_game` / `retro_unload_game` content loading that respects `need_fullpath`.
-- Frame execution, real video/audio/input pipelines, and saves remain out of this spike.
+- Added explicit single-frame stepping with `retro_run` and internal frame metadata capture.
+- Continuous frame loop, real video/audio/input pipelines, and saves remain out of this spike.
 
 ## Phase 5: Video Pipeline
 

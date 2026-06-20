@@ -214,6 +214,21 @@ The internal host can now load and unload user-selected local content through Li
 
 This stage still does not call `retro_run`, execute frames, render video, output audio, map real input, create saves, or implement compressed content handling.
 
+### Libretro Single-Frame Stepping
+
+The internal host can now run one controlled Libretro frame through `internal_runtime_step_frame`.
+
+Current behavior:
+
+- Resolves `retro_run` from the loaded core.
+- Requires the runtime to be prepared, core-loaded, core-initialized, and ROM-loaded first.
+- Calls `retro_run` exactly once per command invocation.
+- Captures the latest `video_refresh_callback` payload into Rust-owned memory immediately because Libretro frame pointers may be transient.
+- Exposes only frame metadata in `InternalRuntimeStatus.latestFrame`: frame number, dimensions, pitch, byte length, pixel format, and duplicate-frame flag.
+- Treats `data == NULL` from the video callback as a duplicate frame and does not copy pixel bytes for that frame.
+
+This stage still does not start a gameplay loop, stream frames to React, render to canvas, output audio, read real input, create saves, or mark the runtime as `running`.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:
