@@ -66,6 +66,32 @@ pub fn internal_runtime_load_core(
 }
 
 #[tauri::command]
+pub fn internal_runtime_init_core(
+    state: State<'_, InternalEmulationState>,
+) -> Result<InternalRuntimeStatus, String> {
+    match state.init_loaded_core() {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            state.mark_error(&error)?;
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn internal_runtime_deinit_core(
+    state: State<'_, InternalEmulationState>,
+) -> Result<InternalRuntimeStatus, String> {
+    match state.deinit_loaded_core() {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            state.mark_error(&error)?;
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
 pub fn internal_runtime_start(
     state: State<'_, InternalEmulationState>,
 ) -> Result<InternalRuntimeStatus, String> {

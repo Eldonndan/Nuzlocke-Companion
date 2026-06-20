@@ -33,6 +33,7 @@ impl InternalEmulationState {
             status.save_directory = request.save_directory;
             status.core_info = None;
             status.is_core_loaded = false;
+            status.is_core_initialized = false;
             status.is_rom_loaded = false;
             status.is_running = false;
             status.last_error = None;
@@ -56,6 +57,58 @@ impl InternalEmulationState {
             status.phase = InternalRuntimePhase::CoreLoaded;
             status.core_info = Some(core_info);
             status.is_core_loaded = true;
+            status.is_core_initialized = false;
+            status.is_rom_loaded = false;
+            status.is_running = false;
+            status.last_error = None;
+        })
+    }
+
+    pub fn init_loaded_core(&self) -> Result<InternalRuntimeStatus, String> {
+        {
+            let mut loaded_host = self
+                .host
+                .lock()
+                .map_err(|_| "No se pudo inicializar el host Libretro interno.".to_string())?;
+            let host = loaded_host
+                .as_mut()
+                .ok_or_else(|| "No Libretro core is loaded.".to_string())?;
+
+            if !host.is_initialized() {
+                host.init_core()?;
+            }
+        }
+
+        self.update_status(|status| {
+            status.phase = InternalRuntimePhase::CoreInitialized;
+            status.is_core_loaded = true;
+            status.is_core_initialized = true;
+            status.is_rom_loaded = false;
+            status.is_running = false;
+            status.last_error = None;
+        })
+    }
+
+    pub fn deinit_loaded_core(&self) -> Result<InternalRuntimeStatus, String> {
+        let is_core_loaded = {
+            let mut loaded_host = self
+                .host
+                .lock()
+                .map_err(|_| "No se pudo desinicializar el host Libretro interno.".to_string())?;
+            let Some(host) = loaded_host.as_mut() else {
+                return Err("No Libretro core is loaded.".into());
+            };
+
+            host.deinit_core()?;
+            true
+        };
+
+        self.update_status(|status| {
+            // The dynamic library remains loaded after deinit; only the core lifecycle
+            // moves back from initialized to loaded.
+            status.phase = InternalRuntimePhase::CoreLoaded;
+            status.is_core_loaded = is_core_loaded;
+            status.is_core_initialized = false;
             status.is_rom_loaded = false;
             status.is_running = false;
             status.last_error = None;
@@ -77,6 +130,7 @@ impl InternalEmulationState {
             status.phase = InternalRuntimePhase::Stopped;
             status.core_info = None;
             status.is_core_loaded = false;
+            status.is_core_initialized = false;
             status.is_rom_loaded = false;
             status.is_running = false;
             status.last_error = None;

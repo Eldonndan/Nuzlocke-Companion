@@ -166,6 +166,25 @@ This spike does not call `retro_init`, does not load ROMs, does not call `retro_
 
 The next step is to design the minimum callback surface and lifecycle needed before any ROM loading is attempted.
 
+### Libretro Callbacks and Init Lifecycle
+
+The internal host can now configure the minimum Libretro frontend callbacks and call the core lifecycle functions:
+
+- `retro_set_environment`
+- `retro_set_video_refresh`
+- `retro_set_audio_sample`
+- `retro_set_audio_sample_batch`
+- `retro_set_input_poll`
+- `retro_set_input_state`
+- `retro_init`
+- `retro_deinit`
+
+The callbacks are intentionally no-op. They do not dereference frame/audio/input pointers, do not send frames to React, do not play audio, and do not read real input. The audio batch callback reports the received frame count as consumed so cores do not retry discarded audio while the real audio pipeline is still absent.
+
+The host tracks initialization so `retro_init` is not called twice and `retro_deinit` is called only after a successful init. Dropping a loaded host also deinitializes once if needed.
+
+This stage still does not load ROMs, call `retro_load_game`, call `retro_run`, render video, output audio, or map input.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

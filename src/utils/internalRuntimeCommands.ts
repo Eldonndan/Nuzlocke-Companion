@@ -4,6 +4,7 @@ export type InternalRuntimePhase =
   | "idle"
   | "prepared"
   | "core-loaded"
+  | "core-initialized"
   | "rom-loaded"
   | "running"
   | "paused"
@@ -27,6 +28,7 @@ export type InternalRuntimeStatus = {
   saveDirectory?: string | null;
   coreInfo?: InternalCoreInfo | null;
   isCoreLoaded: boolean;
+  isCoreInitialized: boolean;
   isRomLoaded: boolean;
   isRunning: boolean;
   lastError?: string | null;
@@ -51,6 +53,14 @@ export function prepareInternalRuntime(request: PrepareInternalRuntimeRequest) {
 
 export function loadInternalRuntimeCore() {
   return invoke<InternalRuntimeStatus>("internal_runtime_load_core");
+}
+
+export function initInternalRuntimeCore() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_init_core");
+}
+
+export function deinitInternalRuntimeCore() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_deinit_core");
 }
 
 export function startInternalRuntime() {
