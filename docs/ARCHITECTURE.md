@@ -229,6 +229,19 @@ Current behavior:
 
 This stage still does not start a gameplay loop, stream frames to React, render to canvas, output audio, read real input, create saves, or mark the runtime as `running`.
 
+### Libretro Bounded Frame Loop
+
+The internal host now includes a bounded frame-loop command for controlled runtime testing:
+
+- `internal_runtime_run_frame_loop` executes up to a caller-provided `maxFrames` batch.
+- `targetFps` applies simple per-frame pacing with `std::thread::sleep` when frame execution finishes early.
+- `internal_runtime_cancel_frame_loop` can request cancellation; the active batch checks this flag between frames.
+- The host lock is held during the bounded batch so lifecycle commands cannot unload or deinitialize the core while `retro_run` is executing.
+- The runtime may be marked `running` during the batch, but returns to `rom-loaded` when the batch finishes or fails.
+- The status exposes `frameLoop`, `latestFrame`, and `steppedFrames`; frame bytes remain private to Rust.
+
+This is not the final gameplay loop. `internal_runtime_start`, `pause`, and `resume` still return not-implemented responses. There is still no UI rendering, React frame transport, real audio, real input, save management, or continuous emulator runtime.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

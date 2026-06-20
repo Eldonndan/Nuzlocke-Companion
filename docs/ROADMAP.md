@@ -87,7 +87,8 @@ Status:
 - Added a minimal environment callback for pixel format, directories, variables, and no-game support.
 - Added basic `retro_load_game` / `retro_unload_game` content loading that respects `need_fullpath`.
 - Added explicit single-frame stepping with `retro_run` and internal frame metadata capture.
-- Continuous frame loop, real video/audio/input pipelines, and saves remain out of this spike.
+- Added a bounded, cancelable frame-loop command for controlled batches.
+- Final continuous gameplay loop, real video/audio/input pipelines, and saves remain out of this spike.
 
 ## Phase 5: Video Pipeline
 

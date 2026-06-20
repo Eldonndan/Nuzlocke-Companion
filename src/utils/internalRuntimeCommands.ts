@@ -47,6 +47,20 @@ export type InternalFrameInfo = {
   isDuplicate: boolean;
 };
 
+export type RunFrameLoopRequest = {
+  maxFrames: number;
+  targetFps?: number | null;
+};
+
+export type InternalFrameLoopInfo = {
+  isActive: boolean;
+  cancelRequested: boolean;
+  targetFps?: number | null;
+  maxFrames?: number | null;
+  framesRun: number;
+  lastError?: string | null;
+};
+
 export type InternalRuntimeStatus = {
   phase: InternalRuntimePhase;
   core?: string | null;
@@ -58,6 +72,7 @@ export type InternalRuntimeStatus = {
   loadedGame?: InternalLoadedGameInfo | null;
   latestFrame?: InternalFrameInfo | null;
   steppedFrames: number;
+  frameLoop?: InternalFrameLoopInfo | null;
   isCoreLoaded: boolean;
   isCoreInitialized: boolean;
   isRomLoaded: boolean;
@@ -104,6 +119,16 @@ export function unloadInternalRuntimeGame() {
 
 export function stepInternalRuntimeFrame() {
   return invoke<InternalRuntimeStatus>("internal_runtime_step_frame");
+}
+
+export function runInternalRuntimeFrameLoop(request: RunFrameLoopRequest) {
+  return invoke<InternalRuntimeStatus>("internal_runtime_run_frame_loop", {
+    request,
+  });
+}
+
+export function cancelInternalRuntimeFrameLoop() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_cancel_frame_loop");
 }
 
 export function startInternalRuntime() {
