@@ -1,6 +1,7 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { EmulatorConfigPanel } from "../components/emulator/EmulatorConfigPanel";
+import { InternalRuntimeFramePreview } from "../components/emulator/InternalRuntimeFramePreview";
 import { QuickEditPanel } from "../components/edit/QuickEditPanel";
 import { GameplayFrame } from "../components/layout/GameplayFrame";
 import { BadgePanel } from "../components/status/BadgePanel";
@@ -1227,6 +1228,9 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
         <span>Haz click en los paneles para editar la run.</span>
       </section>
 
+      {!isLegacyRuntime ? (
+        <InternalRuntimeFramePreview />
+      ) : null}
 
       <section className="play-layout" aria-label="Diseño principal">
         <GameplayFrame

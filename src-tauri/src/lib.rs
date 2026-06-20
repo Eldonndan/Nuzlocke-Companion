@@ -2,10 +2,11 @@ mod emulation;
 
 use emulation::commands::{
     internal_runtime_cancel_frame_loop, internal_runtime_deinit_core, internal_runtime_get_status,
-    internal_runtime_init_core, internal_runtime_load_core, internal_runtime_load_game,
-    internal_runtime_pause, internal_runtime_prepare, internal_runtime_reset,
-    internal_runtime_resume, internal_runtime_run_frame_loop, internal_runtime_start,
-    internal_runtime_step_frame, internal_runtime_stop, internal_runtime_unload_game,
+    internal_runtime_get_latest_frame_snapshot, internal_runtime_init_core,
+    internal_runtime_load_core, internal_runtime_load_game, internal_runtime_pause,
+    internal_runtime_prepare, internal_runtime_reset, internal_runtime_resume,
+    internal_runtime_run_frame_loop, internal_runtime_start, internal_runtime_step_frame,
+    internal_runtime_stop, internal_runtime_unload_game,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -1514,6 +1515,7 @@ pub fn run() {
             undock_emulator_window,
             resize_docked_emulator,
             internal_runtime_get_status,
+            internal_runtime_get_latest_frame_snapshot,
             internal_runtime_prepare,
             internal_runtime_load_core,
             internal_runtime_init_core,
@@ -1532,4 +1534,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-

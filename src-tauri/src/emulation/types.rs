@@ -124,6 +124,16 @@ pub struct InternalFrameInfo {
     pub is_duplicate: bool,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalFrameSnapshot {
+    pub info: InternalFrameInfo,
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+    pub rgba_byte_len: usize,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InternalFrameLoopInfo {

@@ -47,6 +47,14 @@ export type InternalFrameInfo = {
   isDuplicate: boolean;
 };
 
+export type InternalFrameSnapshot = {
+  info: InternalFrameInfo;
+  width: number;
+  height: number;
+  rgba: number[];
+  rgbaByteLen: number;
+};
+
 export type RunFrameLoopRequest = {
   maxFrames: number;
   targetFps?: number | null;
@@ -89,6 +97,12 @@ export type PrepareInternalRuntimeRequest = {
 
 export function getInternalRuntimeStatus() {
   return invoke<InternalRuntimeStatus>("internal_runtime_get_status");
+}
+
+export function getLatestInternalRuntimeFrameSnapshot() {
+  return invoke<InternalFrameSnapshot | null>(
+    "internal_runtime_get_latest_frame_snapshot",
+  );
 }
 
 export function prepareInternalRuntime(request: PrepareInternalRuntimeRequest) {

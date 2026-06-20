@@ -6,10 +6,10 @@ use std::time::{Duration, Instant};
 use super::libretro_host::LibretroHost;
 use super::types::{
     InternalCoreInfo, InternalEnvironmentInfo, InternalFrameInfo, InternalFrameLoopInfo,
-    InternalLoadedGameInfo, InternalRuntimePhase, InternalRuntimeStatus,
+    InternalFrameSnapshot, InternalLoadedGameInfo, InternalRuntimePhase, InternalRuntimeStatus,
     PrepareInternalRuntimeRequest, RunFrameLoopRequest,
 };
-use super::video::reset_video_state;
+use super::video::{latest_frame_snapshot_rgba, reset_video_state};
 
 const MAX_FRAME_LOOP_FRAMES: u32 = 600;
 const DEFAULT_FRAME_LOOP_FPS: u32 = 60;
@@ -34,6 +34,10 @@ impl InternalEmulationState {
             .lock()
             .map(|status| status.clone())
             .map_err(|_| "No se pudo leer el estado del runtime interno.".to_string())
+    }
+
+    pub fn latest_frame_snapshot(&self) -> Result<Option<InternalFrameSnapshot>, String> {
+        latest_frame_snapshot_rgba()
     }
 
     pub fn prepare(

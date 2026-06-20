@@ -242,6 +242,18 @@ The internal host now includes a bounded frame-loop command for controlled runti
 
 This is not the final gameplay loop. `internal_runtime_start`, `pause`, and `resume` still return not-implemented responses. There is still no UI rendering, React frame transport, real audio, real input, save management, or continuous emulator runtime.
 
+### Internal Frame Snapshot and Debug Preview
+
+The internal runtime can now expose the latest captured video frame through an explicit snapshot command:
+
+- Rust keeps the native Libretro frame bytes private in `video.rs`.
+- `internal_runtime_get_latest_frame_snapshot` converts the latest renderable frame to tightly packed RGBA.
+- Conversion supports `xrgb8888`, `rgb565`, and `0rgb1555`, while respecting the source frame pitch.
+- Duplicate Libretro frames can reuse the most recent renderable frame buffer.
+- React includes a debug canvas preview that manually requests the latest snapshot and draws it with `putImageData`.
+
+This is still a debug transport, not the final renderer. There is no automatic streaming, no Rust-to-React frame events, no final gameplay loop, no real audio, and no real input.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:
