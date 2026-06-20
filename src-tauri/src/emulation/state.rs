@@ -23,6 +23,8 @@ impl InternalEmulationState {
         &self,
         request: PrepareInternalRuntimeRequest,
     ) -> Result<InternalRuntimeStatus, String> {
+        // Preparing a new runtime configuration invalidates any loaded core.
+        self.clear_host()?;
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::Prepared;
             status.core = Some(request.core);
