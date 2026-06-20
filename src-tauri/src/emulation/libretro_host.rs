@@ -68,7 +68,7 @@ impl LibretroHost {
             return Err("Libretro core is already initialized.".into());
         }
 
-        self.symbols.set_noop_callbacks();
+        self.symbols.set_minimal_frontend_callbacks();
         self.symbols.init();
         self.initialized = true;
         Ok(())

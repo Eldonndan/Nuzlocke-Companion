@@ -101,9 +101,12 @@ impl LibretroCoreSymbols {
         }
     }
 
-    pub fn set_noop_callbacks(&self) {
-        // SAFETY: These setters install static no-op callbacks with signatures matching
-        // libretro.h. The callbacks do not dereference pointers or access shared state.
+    pub fn set_minimal_frontend_callbacks(&self) {
+        // SAFETY: These setters install static callbacks with signatures matching
+        // libretro.h. The environment callback is a minimal frontend implementation
+        // backed by controlled global state for the single active core supported today;
+        // it handles incoming pointers with null checks internally. Video, audio, and
+        // input callbacks remain no-op stubs until real pipelines are implemented.
         unsafe {
             (self.retro_set_environment)(environment_callback);
             (self.retro_set_video_refresh)(video_refresh_callback);
