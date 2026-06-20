@@ -232,9 +232,7 @@ impl InternalEmulationState {
             .store(false, Ordering::SeqCst);
 
         let result = self.run_frame_loop_inner(&loop_config);
-        self.clear_frame_loop_control();
-
-        match result {
+        let final_result = match result {
             Ok((latest_frame, environment_info, frames_run, cancelled)) => self
                 .mark_frame_loop_finished(
                     latest_frame,
@@ -247,7 +245,10 @@ impl InternalEmulationState {
                 let _ = self.mark_frame_loop_failed(&loop_config, &error);
                 Err(error)
             }
-        }
+        };
+
+        self.clear_frame_loop_control();
+        final_result
     }
 
     pub fn cancel_frame_loop(&self) -> Result<InternalRuntimeStatus, String> {
