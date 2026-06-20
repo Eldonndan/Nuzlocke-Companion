@@ -15,6 +15,13 @@ export function EmulatorConfigPanel({
   onSelectRom,
   onClose,
 }: EmulatorConfigPanelProps) {
+  const shouldWarnEmulatorPath =
+    config.executablePath.trim().length > 0 &&
+    !config.executablePath.trim().toLowerCase().endsWith(".exe");
+  const shouldWarnRomPath =
+    config.romPath.trim().length > 0 &&
+    !config.romPath.trim().toLowerCase().endsWith(".gba");
+
   const updateLaunchArgs = (value: string) => {
     onChange({
       ...config,
@@ -59,6 +66,11 @@ export function EmulatorConfigPanel({
             Buscar
           </button>
         </div>
+        {shouldWarnEmulatorPath ? (
+          <small className="form-warning">
+            La ruta del emulador debería apuntar a mGBA.exe.
+          </small>
+        ) : null}
       </label>
 
       <label className="form-field">
@@ -76,6 +88,11 @@ export function EmulatorConfigPanel({
             Buscar
           </button>
         </div>
+        {shouldWarnRomPath ? (
+          <small className="form-warning">
+            La ROM debería ser un archivo .gba.
+          </small>
+        ) : null}
       </label>
 
       <label className="form-field">

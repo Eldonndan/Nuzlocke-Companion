@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { EmulatorConfigPanel } from "../components/emulator/EmulatorConfigPanel";
 import { QuickEditPanel } from "../components/edit/QuickEditPanel";
@@ -15,7 +15,9 @@ import type {
   CaptureSessionStatus,
   CaptureStatus,
   CaptureWindow,
+  DockedWindowInfo,
   EmulatorConfig,
+  HostRect,
   LiveCaptureFrame,
   OverlayAction,
   PokemonSlot,
@@ -24,18 +26,25 @@ import type {
 import {
   captureWindowFrame,
   detectEmulatorWindow,
+  dockEmulatorWindow,
+  findMgbaWindows,
   focusEmulatorWindow,
+  focusMainWindow,
   getCaptureStatus,
   hideOverlay,
   launchEmulator,
+  minimizeMainWindow,
   positionEmulatorWindow,
   positionOverlayWindow,
   selectEmulatorExecutable,
   selectRomFile,
   setOverlayClickThrough,
   showOverlay,
+  showMainWindow,
+  resizeDockedEmulator,
   startCaptureSession,
   stopCaptureSession,
+  undockEmulatorWindow,
 } from "../utils/emulatorCommands";
 import {
   clearSavedRun,
@@ -128,6 +137,22 @@ function saveOverlayLayout(layout: OverlayLayout) {
   window.localStorage.setItem(overlayLayoutStorageKey, JSON.stringify(layout));
 }
 
+function getWindowScore(window: CaptureWindow) {
+  const lowerTitle = window.title.toLowerCase();
+  const titleScore = lowerTitle.includes("mgba")
+    ? 3000
+    : lowerTitle.includes("pokemon") || lowerTitle.includes("pok\u00e9mon")
+      ? 1800
+      : 1000;
+  return titleScore + Math.min(500_000, Math.max(0, window.width * window.height));
+}
+
+function chooseBestWindow(windows: CaptureWindow[]) {
+  return [...windows].sort((firstWindow, secondWindow) =>
+    getWindowScore(secondWindow) - getWindowScore(firstWindow),
+  )[0] ?? null;
+}
+
 export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const [runState, setRunState] = useState<RunState>(() => loadSavedRun(run));
   const [editingSlotIndex, setEditingSlotIndex] = useState<number | null>(null);
@@ -140,14 +165,18 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const [captureFps, setCaptureFps] = useState<CaptureFps>(30);
   const [captureSession, setCaptureSession] = useState<CaptureSessionStatus | null>(null);
   const [isCaptureSessionRunning, setIsCaptureSessionRunning] = useState(false);
+  const [dockedWindow, setDockedWindow] = useState<DockedWindowInfo | null>(null);
   const [isOverlayEditing, setIsOverlayEditing] = useState(false);
-  const [overlayStatus, setOverlayStatus] = useState("Modo recomendado: overlay listo");
+  const [overlayStatus, setOverlayStatus] = useState("Modo recomendado: modo acoplado listo");
   const [windowStatus, setWindowStatus] = useState(
     runState.captureWindow ? "Ventana detectada" : "Ventana de juego sin detectar",
   );
 
   const hasSavedInitialRun = useRef(false);
   const isTestFrameRequestInFlight = useRef(false);
+  const gameplayScreenRef = useRef<HTMLDivElement | null>(null);
+  const dockResizeTimeoutRef = useRef<number | null>(null);
+  const dockedWindowIdRef = useRef<string | null>(null);
 
   const editingPokemon =
     editingSlotIndex === null ? null : runState.team[editingSlotIndex];
@@ -155,6 +184,70 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const hasEmulatorConfigured = Boolean(
     emulatorConfig.executablePath && emulatorConfig.romPath,
   );
+
+  const getGameplayHostRect = (): HostRect | null => {
+    const gameplayElement = gameplayScreenRef.current;
+
+    if (!gameplayElement) {
+      return null;
+    }
+
+    const rect = gameplayElement.getBoundingClientRect();
+
+    if (rect.width <= 0 || rect.height <= 0) {
+      return null;
+    }
+
+    return {
+      x: Math.round(window.screenX + rect.left),
+      y: Math.round(window.screenY + rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      coordinateSpace: "screen",
+    };
+  };
+
+  const findExistingMgbaWindow = async () => {
+    const existingWindows = await findMgbaWindows();
+    return chooseBestWindow(existingWindows);
+  };
+
+  const reacomodarDockedGame = async () => {
+    if (!dockedWindow) {
+      setOverlayStatus("No hay juego acoplado para reacomodar.");
+      return;
+    }
+
+    const hostRect = getGameplayHostRect();
+    if (!hostRect) {
+      setOverlayStatus("No se pudo calcular el cuadro de juego.");
+      return;
+    }
+
+    try {
+      await resizeDockedEmulator(dockedWindow.windowId, hostRect);
+      setOverlayStatus("Juego reacomodado.");
+    } catch {
+      setOverlayStatus("No se pudo reacomodar el juego.");
+    }
+  };
+
+  const undockCurrentGame = async () => {
+    if (!dockedWindow) {
+      return;
+    }
+
+    try {
+      await undockEmulatorWindow(dockedWindow.windowId);
+      dockedWindowIdRef.current = null;
+      setDockedWindow(null);
+      setOverlayStatus("Juego desacoplado.");
+    } catch (error) {
+      setOverlayStatus(
+        typeof error === "string" ? error : "No se pudo desacoplar el juego.",
+      );
+    }
+  };
 
   const getCaptureStatusLabel = (status: CaptureSessionStatus) => {
     if (!status.isActive) {
@@ -250,6 +343,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const updateEmulatorConfig = (config: EmulatorConfig) => {
     void stopNativeCapture("Captura detenida");
     void hideOverlay();
+    void undockCurrentGame();
     setRunState((currentRun) => ({
       ...currentRun,
       emulatorConfig: config,
@@ -332,6 +426,24 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     }
   };
 
+  const restoreMainAppFromOverlay = async () => {
+    try {
+      await setOverlayClickThrough(false);
+      await emit("overlay-edit-mode", false);
+      setIsOverlayEditing(false);
+      await hideOverlay();
+      await showMainWindow();
+      await focusMainWindow();
+      setOverlayStatus("Ventana principal restaurada.");
+    } catch (error) {
+      setOverlayStatus(
+        typeof error === "string"
+          ? error
+          : "No se pudo volver a la app principal.",
+      );
+    }
+  };
+
   const applyOverlayAction = (action: OverlayAction) => {
     if (action.type === "increase-lives") {
       updateLives(1);
@@ -360,6 +472,11 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
 
     if (action.type === "close-edit-mode") {
       void setOverlayEditMode(false);
+      return;
+    }
+
+    if (action.type === "restore-main-window") {
+      void restoreMainAppFromOverlay();
     }
   };
 
@@ -488,70 +605,276 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     }
   };
 
-  const startOverlaySession = async () => {
-    if (!hasEmulatorConfigured) {
-      setOverlayStatus("Configura el emulador para jugar en modo overlay.");
-      setIsEmulatorPanelOpen(true);
-      return;
-    }
-
+  const startDockedSession = async () => {
     await stopNativeCapture("");
-    setSessionStatus("Iniciando mGBA...");
-    setOverlayStatus("Preparando modo overlay...");
+    await hideOverlay();
+    setSessionStatus("Preparando modo acoplado...");
+    setOverlayStatus("Buscando mGBA abierto...");
     setWindowStatus("Esperando ventana...");
 
     try {
-      const result = await launchEmulator(
-        emulatorConfig.executablePath,
-        emulatorConfig.romPath,
-        emulatorConfig.launchArgs,
-      );
+      const runDockedStep = async <T,>(
+        label: string,
+        operation: () => Promise<T>,
+      ) => {
+        setOverlayStatus(`${label}...`);
 
-      setRunState((currentRun) => ({
-        ...currentRun,
-        captureWindow: undefined,
-        emulatorConfig: {
-          ...emulatorConfig,
-          lastLaunchedProcessId: result.processId ?? undefined,
-        },
-      }));
+        try {
+          return await operation();
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : typeof error === "string"
+                ? error
+                : "Error desconocido.";
+          throw new Error(`${label}: ${message}`);
+        }
+      };
 
-      if (!result.processId) {
-        setWindowStatus("No se pudo detectar la ventana");
-        setOverlayStatus("mGBA iniciado, pero no se recibió PID.");
-        return;
-      }
-
-      const captureWindow = await detectWindowForProcess(result.processId, true);
+      let captureWindow = await runDockedStep("Buscando mGBA abierto", async () => {
+        const foundWindow = await findExistingMgbaWindow();
+        if (foundWindow) {
+          setWindowStatus("mGBA abierto encontrado");
+        }
+        return foundWindow;
+      });
+      let lastLaunchedProcessId = emulatorConfig.lastLaunchedProcessId;
 
       if (!captureWindow) {
-        setOverlayStatus("No se pudo detectar la ventana de mGBA.");
-        return;
+        if (!hasEmulatorConfigured) {
+          setIsEmulatorPanelOpen(true);
+          throw new Error(
+            "No se encontró una ventana de mGBA. Configura el emulador y la ROM para abrirlo.",
+          );
+        }
+
+        let launchResult;
+        try {
+          launchResult = await runDockedStep("Abriendo mGBA", () =>
+            launchEmulator(
+              emulatorConfig.executablePath,
+              emulatorConfig.romPath,
+              emulatorConfig.launchArgs,
+            ),
+          );
+          lastLaunchedProcessId = launchResult.processId ?? undefined;
+        } catch {
+          captureWindow = await findExistingMgbaWindow();
+
+          if (!captureWindow) {
+            throw new Error(
+              "No se pudo abrir mGBA. Revisa que la ruta apunte a mGBA.exe y que tengas permisos para ejecutarlo. Si mGBA está ejecutándose como administrador, abre Nuzlocke Companion también como administrador o ejecuta ambos sin permisos elevados.",
+            );
+          }
+        }
+
+        if (!captureWindow && launchResult?.processId) {
+          captureWindow = await runDockedStep("Detectando ventana", async () => {
+            const detectedWindow = await detectWindowForProcess(launchResult.processId ?? 0, true);
+
+            if (!detectedWindow) {
+              throw new Error("No se encontró una ventana de mGBA.");
+            }
+
+            return detectedWindow;
+          });
+        }
+      }
+
+      if (!captureWindow) {
+        throw new Error("No se encontró una ventana de mGBA.");
+      }
+
+      const hostRect = getGameplayHostRect();
+      if (!hostRect) {
+        throw new Error("No se pudo calcular el cuadro de juego.");
+      }
+
+      const dockTargetWindow = captureWindow;
+      const dockedInfo = await runDockedStep("Acoplando mGBA", () =>
+        dockEmulatorWindow(dockTargetWindow.windowId, hostRect),
+      );
+      await runDockedStep("Enfocando mGBA", () =>
+        focusEmulatorWindow(dockTargetWindow.windowId),
+      );
+
+      const dockedRunState: RunState = {
+        ...runState,
+        captureWindow: dockTargetWindow,
+        emulatorConfig: {
+          ...emulatorConfig,
+          lastLaunchedProcessId,
+        },
+      };
+
+      setDockedWindow(dockedInfo);
+      dockedWindowIdRef.current = dockedInfo.windowId;
+      setRunState(dockedRunState);
+      await emit("run-state-updated", dockedRunState);
+      setWindowStatus("mGBA acoplado");
+      setSessionStatus("Haz click en el juego para jugar");
+      setOverlayStatus("mGBA acoplado. Haz click en el juego para jugar.");
+    } catch (error) {
+      setOverlayStatus(
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "No se pudo iniciar el modo acoplado.",
+      );
+    }
+  };
+
+  const startOverlaySession = async () => {
+    await stopNativeCapture("");
+    setSessionStatus("Preparando modo overlay...");
+    setOverlayStatus("Buscando mGBA abierto...");
+    setWindowStatus("Esperando ventana...");
+
+    try {
+      const runOverlayStep = async <T,>(
+        label: string,
+        operation: () => Promise<T>,
+      ) => {
+        setOverlayStatus(`${label}...`);
+
+        try {
+          return await operation();
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : typeof error === "string"
+                ? error
+                : "Error desconocido.";
+          throw new Error(`${label}: ${message}`);
+        }
+      };
+
+      const findExistingMgbaWindow = async () => {
+        const existingWindows = await findMgbaWindows();
+        const selectedWindow = chooseBestWindow(existingWindows);
+
+        if (selectedWindow) {
+          const status =
+            existingWindows.length > 1
+              ? "mGBA abierto encontrado; se eligió la mejor ventana."
+              : "mGBA abierto encontrado";
+          setWindowStatus(status);
+          setOverlayStatus("mGBA abierto encontrado");
+          return selectedWindow;
+        }
+
+        return null;
+      };
+
+      let captureWindow: CaptureWindow | null = null;
+      let lastLaunchedProcessId = emulatorConfig.lastLaunchedProcessId;
+
+      if (runState.captureWindow) {
+        const existingWindows = await findMgbaWindows();
+        captureWindow =
+          existingWindows.find(
+            (window) => window.windowId === runState.captureWindow?.windowId,
+          ) ?? chooseBestWindow(existingWindows);
+
+        if (captureWindow) {
+          setWindowStatus("mGBA abierto encontrado");
+          setOverlayStatus("mGBA abierto encontrado");
+        }
+      }
+
+      if (!captureWindow) {
+        captureWindow = await runOverlayStep("Buscando mGBA abierto", findExistingMgbaWindow);
+      }
+
+      if (!captureWindow) {
+        if (!hasEmulatorConfigured) {
+          setIsEmulatorPanelOpen(true);
+          throw new Error(
+            "No se encontró mGBA abierto. Configura el emulador y la ROM para poder abrirlo.",
+          );
+        }
+
+        let launchResult;
+
+        try {
+          launchResult = await runOverlayStep("Abriendo mGBA", () =>
+            launchEmulator(
+              emulatorConfig.executablePath,
+              emulatorConfig.romPath,
+              emulatorConfig.launchArgs,
+            ),
+          );
+          lastLaunchedProcessId = launchResult.processId ?? undefined;
+        } catch {
+          captureWindow = await findExistingMgbaWindow();
+
+          if (!captureWindow) {
+            throw new Error(
+              "No se pudo abrir mGBA. Revisa que la ruta apunte a mGBA.exe y que tengas permisos para ejecutarlo.",
+            );
+          }
+        }
+
+        if (!captureWindow && launchResult?.processId) {
+          captureWindow = await runOverlayStep("Detectando ventana", async () => {
+            const detectedWindow = await detectWindowForProcess(launchResult.processId ?? 0, true);
+
+            if (!detectedWindow) {
+              throw new Error("No se encontró una ventana visible de mGBA.");
+            }
+
+            return detectedWindow;
+          });
+        }
+      }
+
+      if (!captureWindow) {
+        throw new Error("No se pudo iniciar el modo overlay: no se encontró una ventana de mGBA.");
       }
 
       const layout = loadOverlayLayout();
+      const overlayRunState: RunState = {
+        ...runState,
+        captureWindow,
+        emulatorConfig: {
+          ...emulatorConfig,
+          lastLaunchedProcessId,
+        },
+      };
 
-      await positionEmulatorWindow(
-        captureWindow.windowId,
-        layout.x,
-        layout.y,
-        layout.emulatorWidth,
-        layout.emulatorHeight,
-      );
-      await positionOverlayWindow(
-        layout.x,
-        layout.y,
-        layout.overlayWidth,
-        layout.overlayHeight,
-      );
+      await runOverlayStep("Posicionando ventanas", async () => {
+        await positionEmulatorWindow(
+          captureWindow.windowId,
+          layout.x,
+          layout.y,
+          layout.emulatorWidth,
+          layout.emulatorHeight,
+        );
+        await positionOverlayWindow(
+          layout.x,
+          layout.y,
+          layout.overlayWidth,
+          layout.overlayHeight,
+        );
+      });
       saveOverlayLayout(layout);
-      await showOverlay();
-      await setOverlayEditMode(false);
-      await setOverlayClickThrough(true);
-      await focusEmulatorWindow(captureWindow.windowId);
+      await runOverlayStep("Mostrando overlay", showOverlay);
+      setRunState(overlayRunState);
+      await emit("run-state-updated", overlayRunState);
+      await runOverlayStep("Desactivando modo edición", async () => {
+        setIsOverlayEditing(false);
+        await emit("overlay-edit-mode", false);
+      });
+      await runOverlayStep("Activando click-through", () => setOverlayClickThrough(true));
+      await runOverlayStep("Enfocando mGBA", () => focusEmulatorWindow(captureWindow.windowId));
+      setOverlayStatus("mGBA enfocado");
+      await runOverlayStep("Minimizando ventana principal", minimizeMainWindow);
 
       setSessionStatus("mGBA listo");
-      setOverlayStatus("Overlay activo. Pulsa F12 para editar la interfaz.");
+      setOverlayStatus("Overlay activo");
     } catch (error) {
       setOverlayStatus(
         error instanceof Error
@@ -612,6 +935,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
 
     void stopNativeCapture("Captura detenida");
     void hideOverlay();
+    void undockCurrentGame();
     clearSavedRun();
     setEditingSlotIndex(null);
     setCapturedFrame(null);
@@ -619,6 +943,13 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     setRunState(cloneRunState(run));
     setSaveStatus("Guardado local");
     setWindowStatus("Ventana de juego sin detectar");
+  };
+
+  const exitToCreateRun = () => {
+    void stopNativeCapture("Captura detenida");
+    void hideOverlay();
+    void undockCurrentGame();
+    onExit();
   };
 
   useEffect(() => {
@@ -707,6 +1038,42 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     return () => window.clearInterval(statusInterval);
   }, [isCaptureSessionRunning, captureFps]);
 
+  useEffect(() => {
+    if (!dockedWindow?.isDocked) {
+      return;
+    }
+
+    const onResize = () => {
+      if (dockResizeTimeoutRef.current !== null) {
+        window.clearTimeout(dockResizeTimeoutRef.current);
+      }
+
+      dockResizeTimeoutRef.current = window.setTimeout(() => {
+        void reacomodarDockedGame();
+      }, 160);
+    };
+
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+
+      if (dockResizeTimeoutRef.current !== null) {
+        window.clearTimeout(dockResizeTimeoutRef.current);
+        dockResizeTimeoutRef.current = null;
+      }
+    };
+  }, [dockedWindow]);
+
+  useEffect(() => {
+    return () => {
+      if (dockedWindowIdRef.current) {
+        void undockEmulatorWindow(dockedWindowIdRef.current);
+        dockedWindowIdRef.current = null;
+      }
+    };
+  }, []);
+
   return (
     <main className="play-screen">
       <header className="play-topbar">
@@ -722,11 +1089,32 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
             type="button"
             onClick={
               hasEmulatorConfigured
-                ? startOverlaySession
+                ? startDockedSession
                 : () => setIsEmulatorPanelOpen(true)
             }
           >
-            {hasEmulatorConfigured ? "Jugar en modo overlay" : "Configurar emulador"}
+            {hasEmulatorConfigured ? "Jugar en modo acoplado" : "Configurar emulador"}
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={startOverlaySession}
+          >
+            Modo overlay
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={reacomodarDockedGame}
+          >
+            Reacomodar juego
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void undockCurrentGame()}
+          >
+            Desacoplar juego
           </button>
           {isCaptureSessionRunning ? (
             <button
@@ -789,7 +1177,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           <button className="secondary-button" type="button" onClick={resetRun}>
             Restablecer run
           </button>
-          <button className="secondary-button" type="button" onClick={onExit}>
+          <button className="secondary-button" type="button" onClick={exitToCreateRun}>
             Nueva run
           </button>
           <span className="save-status">{saveStatus}</span>
@@ -797,9 +1185,9 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       </header>
       <section className="overlay-guidance" aria-label="Modo recomendado">
         <strong>Modo recomendado</strong>
-        <span>abre mGBA y muestra la interfaz encima sin afectar el rendimiento del juego.</span>
-        <span>El overlay no bloquea el teclado ni el mouse mientras juegas.</span>
-        <span>Pulsa F12 para editar la interfaz.</span>
+        <span>ejecuta mGBA dentro del cuadro de juego, sin captura ni pérdida de rendimiento.</span>
+        <span>Haz click en el juego para controlar mGBA.</span>
+        <span>Haz click en los paneles para editar la run.</span>
       </section>
 
 
@@ -811,6 +1199,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           liveFrame={liveFrame}
           captureStatus={frameStatus}
           isCapturing={isCaptureSessionRunning}
+          screenRef={gameplayScreenRef}
         />
         <TeamPanel team={runState.team} onEditSlot={setEditingSlotIndex} />
       </section>
@@ -877,4 +1266,5 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     </main>
   );
 }
+
 

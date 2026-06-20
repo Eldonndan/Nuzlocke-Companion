@@ -10,19 +10,18 @@
 
 ## Final product direction
 
-Nuzlocke Companion is a launcher plus transparent interactive HUD overlay for Pokemon Nuzlocke runs.
+Nuzlocke Companion is a desktop Nuzlocke companion that launches mGBA and, on Windows, docks the real mGBA window inside the main gameplay viewport.
 
-The recommended play flow is overlay mode:
+The recommended play flow is `Modo acoplado`:
 
-1. Launch mGBA with the user's configured ROM.
-2. Detect the launched mGBA window.
-3. Position and resize mGBA into a sensible gameplay area.
-4. Show a transparent always-on-top overlay window.
-5. Put the overlay in click-through mode during normal play.
-6. Return focus to mGBA so keyboard/controller input goes directly to the emulator.
-7. Use global hotkeys and a temporary edit mode for Nuzlocke controls.
+1. Find an already open mGBA window or launch mGBA with the user's configured ROM.
+2. Detect the mGBA top-level window.
+3. Reparent the mGBA HWND into the gameplay frame of the main Tauri window.
+4. Resize the child window to match the gameplay rectangle.
+5. Keep mGBA as the real renderer and input target, so gameplay FPS and keyboard/controller input stay native.
+6. Keep the React UI around the gameplay area for Equipo, Vidas, Medallas, Ruta actual, Captura and Limite de nivel.
 
-Continuous capture inside React/WebView is experimental/debug only. It remains useful for testing capture APIs, but it is not the default product experience because it has frame transport and input-forwarding limits.
+Overlay mode remains available as a secondary path. Experimental capture remains available for debugging, but it is not the recommended product experience.
 
 ## Core modules
 
@@ -34,7 +33,8 @@ Handles:
 - create run flow
 - main configuration/play screen
 - emulator configuration
-- recommended overlay launch flow
+- recommended docked launch flow
+- secondary overlay launch flow
 - experimental capture controls
 
 ### Game State Core
@@ -53,13 +53,27 @@ Stores:
 - capture status
 - level cap
 
-State is persisted locally for MVP. The main window owns state updates and emits the latest `RunState` to the overlay.
+State is persisted locally for MVP.
+
+### Docked Emulator Bridge
+
+Rust commands provide the Windows-first docked mode:
+
+- `find_mgba_windows`
+- `launch_emulator`
+- `detect_emulator_window`
+- `dock_emulator_window`
+- `resize_docked_emulator`
+- `undock_emulator_window`
+- `focus_emulator_window`
+
+The Win32 implementation uses HWND operations such as `SetParent`, `SetWindowLongPtrW`, `SetWindowPos`, `GetWindowRect` and `GetParent`. Docking changes the emulator from a top-level window into a child window of the main app, then restores the previous parent/style/position when the user desacopla the game or leaves the screen.
 
 ### Overlay Window
 
-The overlay is a separate Tauri window opened at `index.html?overlay=1`.
+The overlay is a separate transparent Tauri window opened at `index.html?overlay=1`.
 
-It renders only player-facing HUD elements:
+It renders the same player-facing HUD elements, usually for secondary/testing use:
 
 - Equipo
 - Vidas
@@ -68,32 +82,7 @@ It renders only player-facing HUD elements:
 - Captura
 - Limite de nivel
 
-The overlay normally ignores cursor events, allowing clicks and input to reach mGBA. In edit mode it accepts input and shows a compact edit panel.
-
-### Native Window Bridge
-
-Rust commands provide Windows-focused window control:
-
-- `show_overlay`
-- `hide_overlay`
-- `set_overlay_click_through`
-- `position_overlay_window`
-- `position_emulator_window`
-- `focus_emulator_window`
-
-Tauri's `set_ignore_cursor_events` is used for click-through. The design can add a Win32 `WS_EX_TRANSPARENT` fallback later if needed.
-
-### Global Hotkeys
-
-The official Tauri global shortcut plugin registers default shortcuts:
-
-- `F8`: restar 1 vida
-- `F9`: sumar 1 vida
-- `F10`: ciclar captura
-- `F11`: abrir edicion rapida de ruta
-- `F12`: alternar modo edicion
-
-Rust emits hotkey events to the main window. The main window updates state, persists it, and broadcasts the new `RunState` to the overlay.
+In normal overlay play it ignores cursor events so mGBA can receive input. In edit mode it accepts input and shows compact controls.
 
 ### Experimental Capture
 
@@ -103,16 +92,17 @@ The capture pipeline remains available as secondary/debug functionality:
 - Windows Graphics Capture session
 - canvas rendering in the main window
 
-It is not the recommended gameplay path.
+It is not the recommended gameplay path because frame transport through React/WebView can add latency and uneven frame pacing.
 
 ## Future plan
 
-- Visual layout editor for overlay placement.
-- Configurable hotkeys.
-- Multi-emulator launch profiles.
-- More robust Windows click-through fallback.
-- Optional capture improvements for debugging or streaming-adjacent workflows.
-- Save watcher/parser only after the manual overlay flow is stable.
+- Improve docked mode DPI handling and client-area cropping.
+- Add support for more emulators and platforms.
+- Add a visual layout editor for HUD placement.
+- Add configurable hotkeys.
+- Improve overlay click-through fallback where needed.
+- Keep capture experimental for diagnostics or future rendering research.
+- Save watcher/parser only after the manual emulator flow is stable.
 
 ## Out of scope
 

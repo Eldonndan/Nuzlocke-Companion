@@ -1,4 +1,5 @@
-use serde::Serialize;
+﻿use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 use std::sync::Mutex;
@@ -56,12 +57,52 @@ struct CaptureSessionStatus {
     last_error: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HostRect {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    coordinate_space: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DockedWindowInfo {
+    window_id: String,
+    previous_parent: Option<String>,
+    previous_style: isize,
+    previous_ex_style: isize,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    is_docked: bool,
+}
+
 const OVERLAY_LABEL: &str = "overlay";
 
 #[cfg(target_os = "windows")]
 #[derive(Default)]
 struct CaptureSessionStore {
     session: Mutex<Option<wgc_capture_session::ActiveCaptureSession>>,
+}
+
+#[derive(Default)]
+struct DockedWindowStore {
+    windows: Mutex<HashMap<String, DockedWindowState>>,
+}
+
+#[derive(Clone)]
+struct DockedWindowState {
+    previous_parent: isize,
+    previous_style: isize,
+    previous_ex_style: isize,
+    previous_x: i32,
+    previous_y: i32,
+    previous_width: i32,
+    previous_height: i32,
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -145,6 +186,18 @@ fn detect_emulator_window(_process_id: u32) -> Result<CaptureWindow, String> {
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
+fn find_mgba_windows() -> Result<Vec<CaptureWindow>, String> {
+    windows_window_detection::find_mgba_windows()
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn find_mgba_windows() -> Result<Vec<CaptureWindow>, String> {
+    Ok(Vec::new())
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
 fn capture_window_frame(window_id: String) -> Result<CapturedFrame, String> {
     windows_window_capture::capture_window_frame(&window_id)
 }
@@ -174,7 +227,7 @@ fn start_capture_session(
     _window_id: String,
     _fps: u32,
 ) -> Result<CaptureSessionStatus, String> {
-    Err("La captura en tiempo real solo estÃ¡ disponible en Windows por ahora.".into())
+    Err("La captura en tiempo real solo está disponible en Windows por ahora.".into())
 }
 
 #[cfg(target_os = "windows")]
@@ -198,7 +251,7 @@ fn stop_capture_session(
         effective_fps: 0.0,
         frames_captured: 0,
         last_frame_at: None,
-        last_error: Some("La captura en tiempo real solo estÃ¡ disponible en Windows por ahora.".into()),
+        last_error: Some("La captura en tiempo real solo está disponible en Windows por ahora.".into()),
     })
 }
 
@@ -223,7 +276,7 @@ fn get_capture_status(
         effective_fps: 0.0,
         frames_captured: 0,
         last_frame_at: None,
-        last_error: Some("La captura en tiempo real solo estÃ¡ disponible en Windows por ahora.".into()),
+        last_error: Some("La captura en tiempo real solo está disponible en Windows por ahora.".into()),
     })
 }
 
@@ -234,8 +287,14 @@ fn show_overlay(app_handle: tauri::AppHandle) -> Result<(), String> {
         .set_always_on_top(true)
         .map_err(|error| format!("No se pudo fijar el overlay encima: {error}"))?;
     overlay
+        .unminimize()
+        .map_err(|error| format!("No se pudo restaurar el overlay: {error}"))?;
+    overlay
         .show()
         .map_err(|error| format!("No se pudo mostrar el overlay: {error}"))?;
+    overlay
+        .set_focus()
+        .map_err(|error| format!("No se pudo traer el overlay al frente: {error}"))?;
     Ok(())
 }
 
@@ -313,6 +372,105 @@ fn focus_emulator_window(_window_id: String) -> Result<(), String> {
     Err("El foco del emulador solo está disponible en Windows por ahora.".into())
 }
 
+#[tauri::command]
+fn minimize_main_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let main_window = get_main_window(&app_handle)?;
+    main_window
+        .minimize()
+        .map_err(|error| format!("No se pudo minimizar la ventana principal: {error}"))
+}
+
+#[tauri::command]
+fn show_main_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let main_window = get_main_window(&app_handle)?;
+    main_window
+        .unminimize()
+        .map_err(|error| format!("No se pudo restaurar la ventana principal: {error}"))?;
+    main_window
+        .show()
+        .map_err(|error| format!("No se pudo mostrar la ventana principal: {error}"))
+}
+
+#[tauri::command]
+fn focus_main_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let main_window = get_main_window(&app_handle)?;
+    main_window
+        .unminimize()
+        .map_err(|error| format!("No se pudo restaurar la ventana principal: {error}"))?;
+    main_window
+        .show()
+        .map_err(|error| format!("No se pudo mostrar la ventana principal: {error}"))?;
+    main_window
+        .set_focus()
+        .map_err(|error| format!("No se pudo enfocar la ventana principal: {error}"))
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn dock_emulator_window(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, DockedWindowStore>,
+    window_id: String,
+    host_rect: HostRect,
+) -> Result<DockedWindowInfo, String> {
+    windows_docked_window::dock_emulator_window(app_handle, &state, window_id, host_rect)
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn dock_emulator_window(
+    _app_handle: tauri::AppHandle,
+    _state: tauri::State<'_, DockedWindowStore>,
+    _window_id: String,
+    _host_rect: HostRect,
+) -> Result<DockedWindowInfo, String> {
+    Err("El modo acoplado solo está disponible en Windows por ahora.".into())
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn resize_docked_emulator(
+    app_handle: tauri::AppHandle,
+    window_id: String,
+    host_rect: HostRect,
+) -> Result<(), String> {
+    windows_docked_window::resize_docked_emulator(app_handle, &window_id, host_rect)
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn resize_docked_emulator(
+    _app_handle: tauri::AppHandle,
+    _window_id: String,
+    _host_rect: HostRect,
+) -> Result<(), String> {
+    Err("El modo acoplado solo está disponible en Windows por ahora.".into())
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn undock_emulator_window(
+    state: tauri::State<'_, DockedWindowStore>,
+    window_id: String,
+) -> Result<(), String> {
+    windows_docked_window::undock_emulator_window(&state, &window_id)
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn undock_emulator_window(
+    _state: tauri::State<'_, DockedWindowStore>,
+    _window_id: String,
+) -> Result<(), String> {
+    Ok(())
+}
+
+fn get_main_window(app_handle: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
+    app_handle
+        .get_webview_window("main")
+        .ok_or_else(|| "No se encontró la ventana principal.".to_string())
+}
+
 fn get_or_create_overlay_window(
     app_handle: &tauri::AppHandle,
 ) -> Result<tauri::WebviewWindow, String> {
@@ -354,7 +512,8 @@ mod windows_window_detection {
     };
 
     struct DetectionContext {
-        process_id: u32,
+        process_id: Option<u32>,
+        title_filter: bool,
         windows: Vec<CaptureWindow>,
     }
 
@@ -364,7 +523,8 @@ mod windows_window_detection {
         }
 
         let mut context = DetectionContext {
-            process_id,
+            process_id: Some(process_id),
+            title_filter: false,
             windows: Vec::new(),
         };
 
@@ -382,8 +542,35 @@ mod windows_window_detection {
             .ok_or_else(|| "No se encontró una ventana visible para este proceso.".into())
     }
 
+    pub fn find_mgba_windows() -> Result<Vec<CaptureWindow>, String> {
+        let mut context = DetectionContext {
+            process_id: None,
+            title_filter: true,
+            windows: Vec::new(),
+        };
+
+        unsafe {
+            EnumWindows(
+                Some(enum_windows_callback),
+                &mut context as *mut DetectionContext as LPARAM,
+            );
+        }
+
+        context.windows.sort_by_key(|window| -window_score(window));
+        Ok(context.windows)
+    }
+
     fn window_score(window: &CaptureWindow) -> i32 {
-        let title_score = if window.title.trim().is_empty() { 0 } else { 1000 };
+        let lower_title = window.title.to_lowercase();
+        let title_score = if lower_title.contains("mgba") {
+            3000
+        } else if lower_title.contains("pokemon") || lower_title.contains("pok\u{e9}mon") {
+            1800
+        } else if window.title.trim().is_empty() {
+            0
+        } else {
+            1000
+        };
         let size_score = (window.width.max(0) * window.height.max(0)).min(500_000);
         title_score + size_score
     }
@@ -394,7 +581,10 @@ mod windows_window_detection {
         let mut window_process_id = 0_u32;
         GetWindowThreadProcessId(hwnd, &mut window_process_id);
 
-        if window_process_id != context.process_id {
+        if context
+            .process_id
+            .is_some_and(|process_id| window_process_id != process_id)
+        {
             return 1;
         }
 
@@ -421,14 +611,23 @@ mod windows_window_detection {
         let width = rect.right - rect.left;
         let height = rect.bottom - rect.top;
 
-        if width <= 0 || height <= 0 {
+        if width < 160 || height < 120 {
+            return 1;
+        }
+
+        let title = get_window_title(hwnd);
+        if title.trim().is_empty() {
+            return 1;
+        }
+
+        if context.title_filter && !is_likely_mgba_title(&title) {
             return 1;
         }
 
         context.windows.push(CaptureWindow {
             window_id: format!("0x{:X}", hwnd as usize),
-            title: get_window_title(hwnd),
-            process_id: context.process_id,
+            title,
+            process_id: window_process_id,
             width,
             height,
             x: rect.left,
@@ -454,6 +653,13 @@ mod windows_window_detection {
         }
 
         String::from_utf16_lossy(&buffer[..copied as usize])
+    }
+
+    fn is_likely_mgba_title(title: &str) -> bool {
+        let lower_title = title.to_lowercase();
+        lower_title.contains("mgba")
+            || lower_title.contains("pokemon")
+            || lower_title.contains("pok\u{e9}mon")
     }
 }
 
@@ -498,7 +704,7 @@ mod windows_window_capture {
             let width = rect.right - rect.left;
             let height = rect.bottom - rect.top;
 
-            if width <= 0 || height <= 0 {
+            if width < 160 || height < 120 {
                 return Err("La ventana no tiene un tamaño válido para capturar.".into());
             }
 
@@ -669,6 +875,242 @@ mod windows_overlay_window {
         }
 
         Ok(())
+    }
+
+    fn parse_hwnd(window_id: &str) -> Result<HWND, String> {
+        let trimmed = window_id.trim();
+        let raw_id = trimmed.strip_prefix("0x").unwrap_or(trimmed);
+        let hwnd_value = usize::from_str_radix(raw_id, 16)
+            .map_err(|_| "El identificador de ventana no es válido.".to_string())?;
+
+        if hwnd_value == 0 {
+            return Err("El identificador de ventana no es válido.".into());
+        }
+
+        Ok(hwnd_value as HWND)
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows_docked_window {
+    use super::{
+        get_main_window, DockedWindowInfo, DockedWindowState, DockedWindowStore, HostRect,
+    };
+    use windows_sys::Win32::Foundation::{HWND, RECT};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetParent, GetWindowLongPtrW, GetWindowRect, SetParent, SetWindowLongPtrW,
+        SetWindowPos, ShowWindow, GWL_EXSTYLE, GWL_STYLE, SW_RESTORE, SWP_FRAMECHANGED,
+        SWP_NOACTIVATE, SWP_NOZORDER, WS_CAPTION, WS_CHILD, WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
+        WS_POPUP, WS_SYSMENU, WS_THICKFRAME, WS_VISIBLE,
+    };
+
+    pub fn dock_emulator_window(
+        app_handle: tauri::AppHandle,
+        state: &tauri::State<'_, DockedWindowStore>,
+        window_id: String,
+        host_rect: HostRect,
+    ) -> Result<DockedWindowInfo, String> {
+        let hwnd = parse_hwnd(&window_id)?;
+        let main_hwnd = get_main_hwnd(&app_handle)?;
+        let mut rect = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
+
+        unsafe {
+            if GetWindowRect(hwnd, &mut rect) == 0 {
+                return Err("No se pudo leer la posición actual de mGBA.".into());
+            }
+        }
+
+        let previous_parent = unsafe { GetParent(hwnd) } as isize;
+        let previous_style = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) };
+        let previous_ex_style = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+        let target = rect_for_parent_client(main_hwnd, &host_rect)?;
+
+        unsafe {
+            if SetParent(hwnd, main_hwnd).is_null() && previous_parent != 0 {
+                return Err("No se pudo acoplar mGBA al cuadro de juego. Si mGBA está ejecutándose como administrador, abre Nuzlocke Companion también como administrador o ejecuta ambos sin permisos elevados.".into());
+            }
+
+            let next_style = (previous_style
+                & !((WS_POPUP
+                    | WS_CAPTION
+                    | WS_THICKFRAME
+                    | WS_SYSMENU
+                    | WS_MINIMIZEBOX
+                    | WS_MAXIMIZEBOX) as isize))
+                | (WS_CHILD | WS_VISIBLE) as isize;
+            if SetWindowLongPtrW(hwnd, GWL_STYLE, next_style) == 0 {
+                return Err("No se pudo cambiar el estilo de la ventana de mGBA.".into());
+            }
+
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, previous_ex_style);
+
+            ShowWindow(hwnd, SW_RESTORE);
+            if SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                target.x,
+                target.y,
+                target.width,
+                target.height,
+                SWP_NOZORDER | SWP_FRAMECHANGED,
+            ) == 0
+            {
+                return Err("No se pudo acoplar mGBA al cuadro de juego.".into());
+            }
+        }
+
+        let docked_state = DockedWindowState {
+            previous_parent,
+            previous_style,
+            previous_ex_style,
+            previous_x: rect.left,
+            previous_y: rect.top,
+            previous_width: rect.right - rect.left,
+            previous_height: rect.bottom - rect.top,
+        };
+        state
+            .windows
+            .lock()
+            .map_err(|_| "No se pudo guardar el estado de acoplamiento.".to_string())?
+            .insert(window_id.clone(), docked_state.clone());
+
+        Ok(DockedWindowInfo {
+            window_id,
+            previous_parent: if docked_state.previous_parent == 0 {
+                None
+            } else {
+                Some(format!("0x{:X}", docked_state.previous_parent as usize))
+            },
+            previous_style,
+            previous_ex_style,
+            x: target.x,
+            y: target.y,
+            width: target.width,
+            height: target.height,
+            is_docked: true,
+        })
+    }
+
+    pub fn resize_docked_emulator(
+        app_handle: tauri::AppHandle,
+        window_id: &str,
+        host_rect: HostRect,
+    ) -> Result<(), String> {
+        let hwnd = parse_hwnd(window_id)?;
+        let main_hwnd = get_main_hwnd(&app_handle)?;
+        let target = rect_for_parent_client(main_hwnd, &host_rect)?;
+
+        unsafe {
+            if SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                target.x,
+                target.y,
+                target.width,
+                target.height,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            ) == 0
+            {
+                return Err("No se pudo reacomodar el juego.".into());
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn undock_emulator_window(
+        state: &tauri::State<'_, DockedWindowStore>,
+        window_id: &str,
+    ) -> Result<(), String> {
+        let hwnd = parse_hwnd(window_id)?;
+        let previous_state = state
+            .windows
+            .lock()
+            .map_err(|_| "No se pudo leer el estado de acoplamiento.".to_string())?
+            .remove(window_id);
+
+        let Some(previous_state) = previous_state else {
+            unsafe {
+                SetParent(hwnd, std::ptr::null_mut());
+                ShowWindow(hwnd, SW_RESTORE);
+            }
+            return Ok(());
+        };
+
+        unsafe {
+            SetParent(hwnd, previous_state.previous_parent as HWND);
+            SetWindowLongPtrW(hwnd, GWL_STYLE, previous_state.previous_style);
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, previous_state.previous_ex_style);
+            ShowWindow(hwnd, SW_RESTORE);
+            if SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                previous_state.previous_x,
+                previous_state.previous_y,
+                previous_state.previous_width.max(320),
+                previous_state.previous_height.max(240),
+                SWP_NOZORDER | SWP_FRAMECHANGED,
+            ) == 0
+            {
+                return Err("No se pudo desacoplar el juego correctamente.".into());
+            }
+        }
+
+        Ok(())
+    }
+
+    struct ClientRect {
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    }
+
+    fn rect_for_parent_client(parent_hwnd: HWND, host_rect: &HostRect) -> Result<ClientRect, String> {
+        let width = host_rect.width.max(160);
+        let height = host_rect.height.max(120);
+
+        if host_rect.coordinate_space == "window-client" {
+            return Ok(ClientRect {
+                x: host_rect.x,
+                y: host_rect.y,
+                width,
+                height,
+            });
+        }
+
+        let mut parent_rect = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
+
+        unsafe {
+            if GetWindowRect(parent_hwnd, &mut parent_rect) == 0 {
+                return Err("No se pudo calcular el área del cuadro de juego.".into());
+            }
+        }
+
+        Ok(ClientRect {
+            x: host_rect.x - parent_rect.left,
+            y: host_rect.y - parent_rect.top,
+            width,
+            height,
+        })
+    }
+
+    fn get_main_hwnd(app_handle: &tauri::AppHandle) -> Result<HWND, String> {
+        let main_window = get_main_window(app_handle)?;
+        main_window
+            .hwnd()
+            .map(|hwnd| hwnd.0 as isize as HWND)
+            .map_err(|error| format!("No se pudo obtener la ventana principal: {error}"))
     }
 
     fn parse_hwnd(window_id: &str) -> Result<HWND, String> {
@@ -992,6 +1434,7 @@ mod wgc_capture_session {
 pub fn run() {
     tauri::Builder::default()
         .manage(CaptureSessionStore::default())
+        .manage(DockedWindowStore::default())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
@@ -1043,6 +1486,7 @@ pub fn run() {
             select_rom_file,
             launch_emulator,
             detect_emulator_window,
+            find_mgba_windows,
             capture_window_frame,
             start_capture_session,
             stop_capture_session,
@@ -1052,8 +1496,18 @@ pub fn run() {
             set_overlay_click_through,
             position_overlay_window,
             position_emulator_window,
-            focus_emulator_window
+            focus_emulator_window,
+            minimize_main_window,
+            show_main_window,
+            focus_main_window,
+            dock_emulator_window,
+            undock_emulator_window,
+            resize_docked_emulator
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+
+
+

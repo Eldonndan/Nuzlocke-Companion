@@ -3,7 +3,9 @@ import type {
   CapturedFrame,
   CaptureSessionStatus,
   CaptureWindow,
+  DockedWindowInfo,
   EmulatorLaunchResult,
+  HostRect,
 } from "../shared/types";
 
 export function selectEmulatorExecutable() {
@@ -30,6 +32,10 @@ export function detectEmulatorWindow(processId: number) {
   return invoke<CaptureWindow>("detect_emulator_window", {
     processId,
   });
+}
+
+export function findMgbaWindows() {
+  return invoke<CaptureWindow[]>("find_mgba_windows");
 }
 
 export function captureWindowFrame(windowId: string) {
@@ -99,6 +105,38 @@ export function positionEmulatorWindow(
 
 export function focusEmulatorWindow(windowId: string) {
   return invoke<void>("focus_emulator_window", {
+    windowId,
+  });
+}
+
+export function minimizeMainWindow() {
+  return invoke<void>("minimize_main_window");
+}
+
+export function showMainWindow() {
+  return invoke<void>("show_main_window");
+}
+
+export function focusMainWindow() {
+  return invoke<void>("focus_main_window");
+}
+
+export function dockEmulatorWindow(windowId: string, hostRect: HostRect) {
+  return invoke<DockedWindowInfo>("dock_emulator_window", {
+    windowId,
+    hostRect,
+  });
+}
+
+export function resizeDockedEmulator(windowId: string, hostRect: HostRect) {
+  return invoke<void>("resize_docked_emulator", {
+    windowId,
+    hostRect,
+  });
+}
+
+export function undockEmulatorWindow(windowId: string) {
+  return invoke<void>("undock_emulator_window", {
     windowId,
   });
 }

@@ -774,6 +774,12 @@ h3 {
   text-transform: uppercase;
 }
 
+.form-warning {
+  color: #ffe3a2;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
 .form-field input {
   height: 42px;
   padding: 0 12px;
@@ -913,7 +919,8 @@ h3 {
 .overlay-team,
 .overlay-status,
 .overlay-edit-panel,
-.overlay-hotkey-help {
+.overlay-hotkey-help,
+.overlay-debug-indicator {
   pointer-events: auto;
   border: 1px solid rgba(168, 207, 255, 0.26);
   border-radius: 8px;
@@ -928,6 +935,27 @@ h3 {
   right: 18px;
   width: 300px;
   padding: 12px;
+}
+
+.overlay-debug-indicator {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  display: grid;
+  gap: 3px;
+  min-width: 150px;
+  padding: 9px 12px;
+}
+
+.overlay-debug-indicator strong {
+  color: #bdf7dc;
+  font-size: 0.92rem;
+}
+
+.overlay-debug-indicator span {
+  color: #85d8ff;
+  font-size: 0.78rem;
+  font-weight: 900;
 }
 
 .overlay-team header,
@@ -1062,7 +1090,7 @@ h3 {
 
 .overlay-edit-panel {
   position: absolute;
-  top: 18px;
+  top: 86px;
   left: 18px;
   display: grid;
   gap: 10px;

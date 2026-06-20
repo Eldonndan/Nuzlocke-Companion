@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 import type { CapturedFrame, LiveCaptureFrame } from "../../shared/types";
 
 type GameplayFrameProps = {
@@ -8,6 +8,7 @@ type GameplayFrameProps = {
   liveFrame: LiveCaptureFrame | null;
   captureStatus: string;
   isCapturing: boolean;
+  screenRef?: RefObject<HTMLDivElement | null>;
 };
 
 export function GameplayFrame({
@@ -17,6 +18,7 @@ export function GameplayFrame({
   liveFrame,
   captureStatus,
   isCapturing,
+  screenRef,
 }: GameplayFrameProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -48,7 +50,7 @@ export function GameplayFrame({
 
   return (
     <section className="gameplay-frame" aria-label="Area de juego">
-      <div className="gameplay-frame__screen">
+      <div className="gameplay-frame__screen" ref={screenRef}>
         {hasLiveFrame ? (
           <canvas
             ref={canvasRef}

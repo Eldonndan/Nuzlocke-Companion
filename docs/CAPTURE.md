@@ -1,25 +1,27 @@
-# Captura y overlay
+# Captura, overlay y modo acoplado
 
 Nuzlocke Companion usa mGBA como emulador recomendado para la primera ruta GBA. La app no incluye emuladores, ROMs, BIOS ni archivos de juego; el usuario configura sus propios archivos.
 
 ## Decision de producto
 
-El modo recomendado ya no es renderizar el emulador dentro de React/WebView mediante captura continua.
+El modo recomendado es `Modo acoplado`.
 
-La experiencia principal es ahora:
+En este modo, la app no intenta convertir mGBA en frames de imagen dentro de React. En vez de eso:
 
-- lanzar mGBA;
-- detectar su ventana;
-- posicionar mGBA;
-- mostrar un overlay transparente con el HUD de Nuzlocke;
-- dejar mGBA enfocado para que teclado y control funcionen directo en el emulador.
+- busca o lanza mGBA;
+- detecta su ventana real;
+- acopla el HWND de mGBA dentro del cuadro de juego de Nuzlocke Companion;
+- mantiene mGBA como renderer nativo y como destino real de input.
+
+Esto evita la perdida de rendimiento y latencia que aparece cuando cada frame debe cruzar Rust, WebView y React.
 
 ## Por que captura es experimental
 
-El prototipo de captura continua demostro dos limites importantes:
+El prototipo de captura continua demostro limites importantes:
 
-- 60 FPS configurados no necesariamente se sienten como 60 FPS reales por el coste de transporte/render;
-- reenviar input desde una WebView hacia el emulador agrega complejidad y latencia.
+- 60 FPS configurados no necesariamente se sienten como 60 FPS reales por el coste de transporte y render;
+- enviar frames como PNG/base64 o buffers hacia la WebView agrega trabajo por frame;
+- reenviar input desde React hacia el emulador agrega complejidad y latencia.
 
 Por eso la captura queda como modo experimental/debug, no como flujo principal.
 
@@ -33,44 +35,34 @@ Se conserva:
 
 La UI debe nombrarlo como `Modo captura experimental`.
 
-## Overlay recomendado
+## Modo acoplado
 
-El overlay es una ventana Tauri transparente, always-on-top y sin decoracion. Muestra solo:
+El modo acoplado es Windows-first y mGBA-first.
 
-- Equipo
-- Vidas
-- Medallas
-- Ruta actual
-- Captura
-- Limite de nivel
+Rust usa APIs Win32 para reparentar la ventana:
 
-En modo normal, la app llama `set_overlay_click_through(true)`, que usa `set_ignore_cursor_events`. Asi el overlay no bloquea mouse ni teclado y mGBA mantiene el foco.
+- `SetParent` para convertir mGBA en ventana hija de la ventana principal;
+- `GetWindowLongPtrW` y `SetWindowLongPtrW` para cambiar estilos de ventana;
+- `SetWindowPos` para ajustar posicion y tamano;
+- `GetWindowRect` y `GetParent` para guardar estado anterior y calcular coordenadas relativas al padre.
 
-En modo edicion, la app llama `set_overlay_click_through(false)`, muestra controles compactos y permite editar valores manuales.
+Al desacoplar, la app restaura padre, estilos y posicion anterior. El frontend tambien intenta desacoplar cuando el usuario cambia la configuracion del emulador, restablece la run o sale hacia `Nueva run`.
 
-## Hotkeys globales
+## Overlay secundario
 
-El plugin oficial `tauri-plugin-global-shortcut` registra:
-
-- `F8`: restar 1 vida
-- `F9`: sumar 1 vida
-- `F10`: ciclar captura
-- `F11`: abrir edicion rapida de ruta
-- `F12`: alternar modo edicion
-
-Los atajos funcionan aunque mGBA tenga el foco. Rust emite eventos a React, la ventana principal actualiza y persiste el `RunState`, y luego emite `run-state-updated` para refrescar el overlay.
+El overlay sigue disponible para pruebas y como alternativa. Es una ventana Tauri transparente, always-on-top y sin decoracion. En modo normal usa click-through para dejar que mGBA reciba input; en modo edicion acepta clicks y permite ajustes rapidos.
 
 ## Limitaciones Windows
 
-- El click-through usa la API de Tauri; si falla en algun entorno Windows, el siguiente paso es agregar fallback con `WS_EX_LAYERED` y `WS_EX_TRANSPARENT`.
-- El layout automatico usa un rectangulo inicial razonable; el editor visual de layout queda para despues.
-- El posicionamiento es Windows-focused por ahora.
-- F8-F12 pueden entrar en conflicto con software externo o configuraciones del emulador.
+- El modo acoplado depende de APIs Win32 y por ahora no aplica a macOS/Linux.
+- Si mGBA corre como administrador y Nuzlocke Companion no, Windows puede bloquear `SetParent`. Ejecuta ambos con el mismo nivel de permisos.
+- DPI y escalado de pantalla pueden requerir ajustes finos en algunos monitores.
+- Algunos emuladores pueden resistir el reparenting o redibujar mal al cambiar estilos.
+- El siguiente refinamiento es acoplar solo el area cliente real de mGBA para evitar barras/menu si aparecen.
 
 ## Siguientes pasos
 
-1. Editor visual para mover HUD, panel de equipo y barra inferior.
-2. Hotkeys configurables.
-3. Perfiles por emulador y soporte para mas plataformas.
-4. Fallback Win32 para click-through si `set_ignore_cursor_events` no cubre todos los casos.
-5. Mantener captura experimental para pruebas, no como experiencia principal.
+1. Mejorar calculo DPI y area cliente.
+2. Agregar medicion visual de estabilidad del modo acoplado.
+3. Soportar mas emuladores con adaptadores por plataforma.
+4. Mantener captura experimental para diagnostico, no como experiencia principal.

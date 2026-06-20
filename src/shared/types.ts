@@ -52,13 +52,34 @@ export type CaptureSessionStatus = {
   lastError?: string | null;
 };
 
+export type HostRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  coordinateSpace: "screen" | "window-client";
+};
+
+export type DockedWindowInfo = {
+  windowId: string;
+  previousParent?: string | null;
+  previousStyle: number;
+  previousExStyle: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  isDocked: boolean;
+};
+
 export type OverlayAction =
   | { type: "decrease-lives" }
   | { type: "increase-lives" }
   | { type: "cycle-capture-status" }
   | { type: "set-route"; routeName: string }
   | { type: "set-level-cap"; levelCap: number }
-  | { type: "close-edit-mode" };
+  | { type: "close-edit-mode" }
+  | { type: "restore-main-window" };
 
 export type PokemonSlot = {
   id: string;

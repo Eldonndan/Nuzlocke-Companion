@@ -64,6 +64,11 @@ export function OverlayScreen() {
 
   return (
     <main className={`overlay-screen ${isEditing ? "overlay-screen--editing" : ""}`}>
+      <aside className="overlay-debug-indicator" aria-label="Estado del overlay">
+        <strong>Overlay activo</strong>
+        <span>F12: editar</span>
+      </aside>
+
       <section className="overlay-team" aria-label="Equipo">
         <header>
           <span>Equipo</span>
@@ -176,6 +181,9 @@ export function OverlayScreen() {
           </label>
           <button type="button" onClick={() => sendAction({ type: "close-edit-mode" })}>
             Cerrar edición
+          </button>
+          <button type="button" onClick={() => sendAction({ type: "restore-main-window" })}>
+            Volver a la app
           </button>
           <p>F8/F9: Vidas · F10: Captura · F11: Ruta · F12: Modo edición</p>
         </aside>
