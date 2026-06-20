@@ -61,6 +61,10 @@ Deliverables:
 - Frontend service wrapper matching the future runtime API.
 - No Libretro dependency added yet unless the spike requires it later.
 
+Status:
+
+- Started with `src-tauri/src/emulation/` module boundaries and stub lifecycle commands.
+
 ## Phase 4: Libretro Core Loading Spike
 
 Objectives:

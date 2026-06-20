@@ -1,4 +1,10 @@
-﻿use serde::{Deserialize, Serialize};
+mod emulation;
+
+use emulation::commands::{
+    internal_runtime_get_status, internal_runtime_pause, internal_runtime_prepare,
+    internal_runtime_reset, internal_runtime_resume, internal_runtime_start, internal_runtime_stop,
+};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
@@ -1435,6 +1441,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(CaptureSessionStore::default())
         .manage(DockedWindowStore::default())
+        .manage(emulation::InternalEmulationState::default())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
@@ -1502,7 +1509,14 @@ pub fn run() {
             focus_main_window,
             dock_emulator_window,
             undock_emulator_window,
-            resize_docked_emulator
+            resize_docked_emulator,
+            internal_runtime_get_status,
+            internal_runtime_prepare,
+            internal_runtime_start,
+            internal_runtime_pause,
+            internal_runtime_resume,
+            internal_runtime_stop,
+            internal_runtime_reset
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

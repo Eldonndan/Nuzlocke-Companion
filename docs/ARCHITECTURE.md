@@ -133,6 +133,22 @@ The migration path is gradual:
 3. Legacy external code remains available while the internal Libretro host is designed.
 4. Future work can add the native emulation host without deleting the fallback mode first.
 
+### Internal Emulation Host Skeleton
+
+The native host skeleton now lives under `src-tauri/src/emulation/`.
+
+Current modules:
+
+- `types.rs`: serializable runtime phase, status, and prepare request types.
+- `state.rs`: shared Tauri state for the internal runtime.
+- `commands.rs`: Tauri command stubs for prepare, start, pause, resume, stop, reset, and status.
+- `libretro_host.rs`: placeholder for future Libretro core loading and lifecycle.
+- `video.rs`, `audio.rs`, `input.rs`, `saves.rs`: placeholders for future emulator subsystems.
+
+This skeleton does not load Libretro, does not open cores, does not open ROMs, does not render video, and does not output audio. It only defines the command/state boundary needed for the next implementation step.
+
+The next technical step is a dynamic loader spike for the mGBA Libretro core, kept behind this internal host boundary.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

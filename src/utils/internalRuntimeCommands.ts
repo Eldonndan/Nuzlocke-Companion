@@ -1,0 +1,60 @@
+import { invoke } from "@tauri-apps/api/core";
+
+export type InternalRuntimePhase =
+  | "idle"
+  | "prepared"
+  | "core-loaded"
+  | "rom-loaded"
+  | "running"
+  | "paused"
+  | "stopped"
+  | "error";
+
+export type InternalRuntimeStatus = {
+  phase: InternalRuntimePhase;
+  core?: string | null;
+  corePath?: string | null;
+  romPath?: string | null;
+  saveDirectory?: string | null;
+  isCoreLoaded: boolean;
+  isRomLoaded: boolean;
+  isRunning: boolean;
+  lastError?: string | null;
+};
+
+export type PrepareInternalRuntimeRequest = {
+  core: "mgba" | string;
+  corePath: string;
+  romPath: string;
+  saveDirectory?: string;
+};
+
+export function getInternalRuntimeStatus() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_get_status");
+}
+
+export function prepareInternalRuntime(request: PrepareInternalRuntimeRequest) {
+  return invoke<InternalRuntimeStatus>("internal_runtime_prepare", {
+    request,
+  });
+}
+
+export function startInternalRuntime() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_start");
+}
+
+export function pauseInternalRuntime() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_pause");
+}
+
+export function resumeInternalRuntime() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_resume");
+}
+
+export function stopInternalRuntime() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_stop");
+}
+
+export function resetInternalRuntime() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_reset");
+}
