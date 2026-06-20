@@ -1,8 +1,9 @@
 mod emulation;
 
 use emulation::commands::{
-    internal_runtime_get_status, internal_runtime_pause, internal_runtime_prepare,
-    internal_runtime_reset, internal_runtime_resume, internal_runtime_start, internal_runtime_stop,
+    internal_runtime_get_status, internal_runtime_load_core, internal_runtime_pause,
+    internal_runtime_prepare, internal_runtime_reset, internal_runtime_resume,
+    internal_runtime_start, internal_runtime_stop,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -1512,6 +1513,7 @@ pub fn run() {
             resize_docked_emulator,
             internal_runtime_get_status,
             internal_runtime_prepare,
+            internal_runtime_load_core,
             internal_runtime_start,
             internal_runtime_pause,
             internal_runtime_resume,

@@ -27,6 +27,7 @@ pub struct InternalRuntimeStatus {
     pub core_path: Option<String>,
     pub rom_path: Option<String>,
     pub save_directory: Option<String>,
+    pub core_info: Option<InternalCoreInfo>,
     pub is_core_loaded: bool,
     pub is_rom_loaded: bool,
     pub is_running: bool,
@@ -41,6 +42,7 @@ impl Default for InternalRuntimeStatus {
             core_path: None,
             rom_path: None,
             save_directory: None,
+            core_info: None,
             is_core_loaded: false,
             is_rom_loaded: false,
             is_running: false,
@@ -56,4 +58,15 @@ pub struct PrepareInternalRuntimeRequest {
     pub core_path: String,
     pub rom_path: String,
     pub save_directory: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalCoreInfo {
+    pub api_version: u32,
+    pub library_name: Option<String>,
+    pub library_version: Option<String>,
+    pub valid_extensions: Option<String>,
+    pub need_fullpath: bool,
+    pub block_extract: bool,
 }

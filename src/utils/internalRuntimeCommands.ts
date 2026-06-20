@@ -10,12 +10,22 @@ export type InternalRuntimePhase =
   | "stopped"
   | "error";
 
+export type InternalCoreInfo = {
+  apiVersion: number;
+  libraryName?: string | null;
+  libraryVersion?: string | null;
+  validExtensions?: string | null;
+  needFullpath: boolean;
+  blockExtract: boolean;
+};
+
 export type InternalRuntimeStatus = {
   phase: InternalRuntimePhase;
   core?: string | null;
   corePath?: string | null;
   romPath?: string | null;
   saveDirectory?: string | null;
+  coreInfo?: InternalCoreInfo | null;
   isCoreLoaded: boolean;
   isRomLoaded: boolean;
   isRunning: boolean;
@@ -37,6 +47,10 @@ export function prepareInternalRuntime(request: PrepareInternalRuntimeRequest) {
   return invoke<InternalRuntimeStatus>("internal_runtime_prepare", {
     request,
   });
+}
+
+export function loadInternalRuntimeCore() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_load_core");
 }
 
 export function startInternalRuntime() {

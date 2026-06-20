@@ -149,6 +149,23 @@ This skeleton does not load Libretro, does not open cores, does not open ROMs, d
 
 The next technical step is a dynamic loader spike for the mGBA Libretro core, kept behind this internal host boundary.
 
+### Libretro Core Loading Spike
+
+The internal host now includes a minimal dynamic loading spike for Libretro cores.
+
+Current behavior:
+
+- Receives a user-provided local core path from `internal_runtime_prepare`.
+- Loads the dynamic library with `libloading`.
+- Resolves the required minimal symbols: `retro_api_version`, `retro_get_system_info`, `retro_init`, and `retro_deinit`.
+- Calls only `retro_api_version` and `retro_get_system_info`.
+- Copies core metadata into `InternalRuntimeStatus.coreInfo`.
+- Marks the internal runtime phase as `core-loaded` when metadata is read successfully.
+
+This spike does not call `retro_init`, does not load ROMs, does not call `retro_load_game`, does not call `retro_run`, and does not implement video, audio, input, or saves.
+
+The next step is to design the minimum callback surface and lifecycle needed before any ROM loading is attempted.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

@@ -80,6 +80,11 @@ Deliverables:
 - Notes on platform constraints, dynamic library loading, and packaging implications.
 - Decision on whether to keep Libretro as the core abstraction.
 
+Status:
+
+- Started with dynamic core loading and static metadata inspection only.
+- ROM loading, callbacks, frame execution, video, audio, input, and saves remain out of this spike.
+
 ## Phase 5: Video Pipeline
 
 Objectives:

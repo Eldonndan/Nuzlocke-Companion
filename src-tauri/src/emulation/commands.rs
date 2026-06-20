@@ -19,31 +19,58 @@ pub fn internal_runtime_prepare(
     request: PrepareInternalRuntimeRequest,
 ) -> Result<InternalRuntimeStatus, String> {
     if request.core.trim().is_empty() {
-        state.mark_error("El core del runtime interno no puede estar vacío.")?;
-        return Err("El core del runtime interno no puede estar vacío.".into());
+        state.mark_error("Internal runtime core cannot be empty.")?;
+        return Err("Internal runtime core cannot be empty.".into());
     }
 
     if request.core_path.trim().is_empty() {
-        state.mark_error("La ruta del core interno no puede estar vacía.")?;
-        return Err("La ruta del core interno no puede estar vacía.".into());
+        state.mark_error("Internal core path cannot be empty.")?;
+        return Err("Internal core path cannot be empty.".into());
     }
 
     if request.rom_path.trim().is_empty() {
-        state.mark_error("La ruta de la ROM no puede estar vacía.")?;
-        return Err("La ruta de la ROM no puede estar vacía.".into());
+        state.mark_error("ROM path cannot be empty.")?;
+        return Err("ROM path cannot be empty.".into());
     }
 
     state.prepare(request)
 }
 
 #[tauri::command]
+pub fn internal_runtime_load_core(
+    state: State<'_, InternalEmulationState>,
+) -> Result<InternalRuntimeStatus, String> {
+    let status = state.status()?;
+    let Some(core_path) = status.core_path.as_deref().map(str::trim) else {
+        let message = "Internal core path is not prepared.";
+        state.mark_error(message)?;
+        return Err(message.into());
+    };
+
+    if core_path.is_empty() {
+        let message = "Internal core path cannot be empty.";
+        state.mark_error(message)?;
+        return Err(message.into());
+    }
+
+    match LibretroHost::load_core(core_path) {
+        Ok(host) => {
+            let core_info = host.core_info();
+            state.mark_core_loaded(host, core_info)
+        }
+        Err(error) => {
+            state.mark_error(&error)?;
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
 pub fn internal_runtime_start(
     state: State<'_, InternalEmulationState>,
 ) -> Result<InternalRuntimeStatus, String> {
-    let host = LibretroHost::new();
-    let message = host.prepare().unwrap_err_or_not_implemented();
-    state.mark_error(&message)?;
-    Err(message)
+    state.mark_error(NOT_IMPLEMENTED)?;
+    Err(NOT_IMPLEMENTED.into())
 }
 
 #[tauri::command]
@@ -74,17 +101,4 @@ pub fn internal_runtime_reset(
     state: State<'_, InternalEmulationState>,
 ) -> Result<InternalRuntimeStatus, String> {
     state.reset_idle()
-}
-
-trait NotImplementedResult {
-    fn unwrap_err_or_not_implemented(self) -> String;
-}
-
-impl NotImplementedResult for Result<(), String> {
-    fn unwrap_err_or_not_implemented(self) -> String {
-        match self {
-            Ok(()) => NOT_IMPLEMENTED.into(),
-            Err(error) => error,
-        }
-    }
 }
