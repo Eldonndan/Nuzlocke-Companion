@@ -8,6 +8,8 @@ import {
 import type { InternalLibretroRuntimeConfig } from "../../shared/types";
 import {
   cancelInternalRuntimeFrameLoop,
+  clearInternalRuntimeAudioBuffer,
+  drainInternalRuntimeAudioChunk,
   getInternalRuntimeStatus,
   getLatestInternalRuntimeFrameSnapshot,
   initInternalRuntimeCore,
@@ -21,6 +23,8 @@ import {
   stepInternalRuntimeFrame,
   clearInternalRuntimeJoypadButtons,
   setInternalRuntimeJoypadButton,
+  type InternalAudioChunk,
+  type InternalAudioInfo,
   type InternalFrameSnapshot,
   type InternalInputInfo,
   type InternalJoypadButton,
@@ -49,6 +53,7 @@ type InternalRuntimeFramePreviewProps = {
 
 const DEBUG_LOOP_BATCH_FRAMES = 6;
 const DEBUG_LOOP_TARGET_FPS = 60;
+const DEBUG_AUDIO_DRAIN_FRAMES = 4096;
 
 const joypadButtons: Array<{ button: InternalJoypadButton; label: string }> = [
   { button: "up", label: "Arriba" },
@@ -126,6 +131,9 @@ export function InternalRuntimeFramePreview({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const debugLoopCancelRequestedRef = useRef(false);
   const debugLoopRunningRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const nextAudioTimeRef = useRef(0);
+  const isAudioDebugEnabledRef = useRef(false);
   const heldKeyboardKeysRef = useRef(new Set<string>());
   const heldKeyboardButtonsRef = useRef(new Set<InternalJoypadButton>());
   const [renderedSnapshotMeta, setRenderedSnapshotMeta] =
@@ -136,6 +144,10 @@ export function InternalRuntimeFramePreview({
   const [saveMemory, setSaveMemory] = useState<InternalSaveMemoryInfo[]>([]);
   const [lastSaveOperation, setLastSaveOperation] =
     useState<InternalSaveOperationResult | null>(null);
+  const [audioInfo, setAudioInfo] = useState<InternalAudioInfo | null>(null);
+  const [isAudioDebugEnabled, setIsAudioDebugEnabled] = useState(false);
+  const [audioDebugMessage, setAudioDebugMessage] =
+    useState("Audio debug apagado.");
   const [status, setStatus] = useState<PreviewStatus>("idle");
   const [message, setMessage] = useState("Sin fotograma renderizado.");
   const [isDebugLoopRunning, setIsDebugLoopRunning] = useState(false);
@@ -157,6 +169,7 @@ export function InternalRuntimeFramePreview({
   const applyRuntimeStatus = (nextStatus: InternalRuntimeStatus) => {
     setRuntimeStatus(nextStatus);
     setInputInfo(nextStatus.inputInfo);
+    setAudioInfo(nextStatus.audioInfo);
     setSaveMemory(nextStatus.saveMemory);
     setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
   };
@@ -260,6 +273,114 @@ export function InternalRuntimeFramePreview({
       setMessage("Frame renderizado.");
     }
     return true;
+  };
+
+  const enableAudioDebug = async () => {
+    try {
+      const context = audioContextRef.current ?? new AudioContext();
+      audioContextRef.current = context;
+      await context.resume();
+      nextAudioTimeRef.current = Math.max(
+        context.currentTime,
+        nextAudioTimeRef.current,
+      );
+      isAudioDebugEnabledRef.current = true;
+      setIsAudioDebugEnabled(true);
+      setAudioDebugMessage("Audio debug activo.");
+    } catch (error) {
+      isAudioDebugEnabledRef.current = false;
+      setIsAudioDebugEnabled(false);
+      setAudioDebugMessage(getErrorMessage(error));
+    }
+  };
+
+  const disableAudioDebug = async () => {
+    isAudioDebugEnabledRef.current = false;
+    setIsAudioDebugEnabled(false);
+    nextAudioTimeRef.current = 0;
+    setAudioDebugMessage("Audio debug apagado.");
+
+    try {
+      const nextStatus = await clearInternalRuntimeAudioBuffer();
+      applyRuntimeStatus(nextStatus);
+    } catch {
+      // Audio debug is best-effort and should not break video/input testing.
+    }
+
+    if (audioContextRef.current?.state === "running") {
+      await audioContextRef.current.suspend();
+    }
+  };
+
+  const enqueueAudioChunk = (chunk: InternalAudioChunk) => {
+    if (
+      !isAudioDebugEnabledRef.current ||
+      chunk.frames <= 0 ||
+      chunk.channels !== 2
+    ) {
+      return;
+    }
+
+    const context = audioContextRef.current;
+    const sampleRate = chunk.sampleRate > 0 ? chunk.sampleRate : context?.sampleRate;
+
+    if (!context || !sampleRate) {
+      return;
+    }
+
+    const buffer = context.createBuffer(2, chunk.frames, sampleRate);
+    const left = buffer.getChannelData(0);
+    const right = buffer.getChannelData(1);
+
+    for (let frame = 0; frame < chunk.frames; frame += 1) {
+      left[frame] = Math.max(
+        -1,
+        Math.min(1, (chunk.samples[frame * 2] ?? 0) / 32768),
+      );
+      right[frame] = Math.max(
+        -1,
+        Math.min(1, (chunk.samples[frame * 2 + 1] ?? 0) / 32768),
+      );
+    }
+
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+
+    const startAt = Math.max(context.currentTime, nextAudioTimeRef.current);
+    source.start(startAt);
+    nextAudioTimeRef.current = startAt + buffer.duration;
+  };
+
+  const drainAndEnqueueAudio = async () => {
+    if (!isAudioDebugEnabledRef.current) {
+      return;
+    }
+
+    try {
+      const chunk = await drainInternalRuntimeAudioChunk(DEBUG_AUDIO_DRAIN_FRAMES);
+      enqueueAudioChunk(chunk);
+      setAudioDebugMessage(
+        chunk.frames > 0
+          ? `Audio debug: ${chunk.frames} frames drenados.`
+          : "Audio debug: sin muestras nuevas.",
+      );
+      const nextStatus = await getInternalRuntimeStatus();
+      applyRuntimeStatus(nextStatus);
+    } catch (error) {
+      setAudioDebugMessage(getErrorMessage(error));
+    }
+  };
+
+  const clearAudioDebugBuffer = async () => {
+    try {
+      const nextStatus = await clearInternalRuntimeAudioBuffer();
+      applyRuntimeStatus(nextStatus);
+      nextAudioTimeRef.current = audioContextRef.current?.currentTime ?? 0;
+      setAudioDebugMessage("Buffer de audio limpiado.");
+    } catch (error) {
+      setAudioDebugMessage(getErrorMessage(error));
+    }
   };
 
   const readRuntimeStatus = async () => {
@@ -383,6 +504,7 @@ export function InternalRuntimeFramePreview({
     }
 
     await refreshSnapshot();
+    await drainAndEnqueueAudio();
   };
 
   const runBatchAndRender = async () => {
@@ -401,6 +523,7 @@ export function InternalRuntimeFramePreview({
     }
 
     await refreshSnapshot();
+    await drainAndEnqueueAudio();
   };
 
   const startDebugRenderLoop = async () => {
@@ -428,6 +551,7 @@ export function InternalRuntimeFramePreview({
 
         const nextSnapshot = await getLatestInternalRuntimeFrameSnapshot();
         const didRenderSnapshot = renderSnapshot(nextSnapshot, { silent: true });
+        await drainAndEnqueueAudio();
 
         if (!didRenderSnapshot) {
           throw new Error("No se pudo renderizar el snapshot del loop debug.");
@@ -609,6 +733,9 @@ export function InternalRuntimeFramePreview({
         void cancelInternalRuntimeFrameLoop();
       }
 
+      isAudioDebugEnabledRef.current = false;
+      void clearInternalRuntimeAudioBuffer();
+      void audioContextRef.current?.close();
       onDebugLoopRunningChange?.(false);
     };
   }, [onDebugLoopRunningChange]);
@@ -798,6 +925,46 @@ export function InternalRuntimeFramePreview({
             disabled={!isDebugLoopRunning}
           >
             Detener loop debug
+          </button>
+        </div>
+      </div>
+
+      <div className="internal-frame-preview__audio">
+        <strong>Audio debug</strong>
+        <span>
+          Experimental: reproduce chunks drenados después de frames o batches.
+          Puede desincronizarse.
+        </span>
+        <span>{isAudioDebugEnabled ? "Activo" : "Apagado"}</span>
+        <span>{audioDebugMessage}</span>
+        <span>{`Frecuencia: ${audioInfo?.sampleRate ?? 0}`}</span>
+        <span>{`Buffer: ${audioInfo?.bufferedFrames ?? 0} frames de audio`}</span>
+        <span>{`Capturados: ${audioInfo?.totalFramesCaptured ?? 0}`}</span>
+        <span>{`Drenados: ${audioInfo?.totalFramesDrained ?? 0}`}</span>
+        <span>{`Descartados: ${audioInfo?.droppedFrames ?? 0}`}</span>
+        <div className="internal-frame-preview__audio-buttons">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void enableAudioDebug()}
+            disabled={isAudioDebugEnabled}
+          >
+            Activar audio debug
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void disableAudioDebug()}
+            disabled={!isAudioDebugEnabled}
+          >
+            Desactivar audio debug
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void clearAudioDebugBuffer()}
+          >
+            Limpiar buffer audio
           </button>
         </div>
       </div>

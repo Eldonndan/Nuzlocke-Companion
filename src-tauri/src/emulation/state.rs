@@ -3,16 +3,19 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use super::audio::{
+    audio_info, clear_audio_buffer, drain_audio_chunk, reset_audio_state,
+};
 use super::input::{
     clear_joypad_buttons, input_info, reset_input_state, set_joypad_button,
 };
 use super::libretro_host::LibretroHost;
 use super::types::{
-    InternalCoreInfo, InternalEnvironmentInfo, InternalFrameInfo, InternalFrameLoopInfo,
-    InternalFrameSnapshot, InternalInputInfo, InternalLoadedGameInfo, InternalRuntimePhase,
-    InternalRuntimeStatus, InternalSaveMemoryInfo, InternalSaveMemoryKind,
-    InternalSaveOperationResult, PrepareInternalRuntimeRequest, RunFrameLoopRequest,
-    SetJoypadButtonRequest,
+    InternalAudioChunk, InternalAudioInfo, InternalCoreInfo, InternalEnvironmentInfo,
+    InternalFrameInfo, InternalFrameLoopInfo, InternalFrameSnapshot, InternalInputInfo,
+    InternalLoadedGameInfo, InternalRuntimePhase, InternalRuntimeStatus, InternalSaveMemoryInfo,
+    InternalSaveMemoryKind, InternalSaveOperationResult, InternalSystemAvInfo,
+    PrepareInternalRuntimeRequest, RunFrameLoopRequest, SetJoypadButtonRequest,
 };
 use super::video::{latest_frame_snapshot_rgba, reset_video_state};
 
@@ -45,6 +48,25 @@ impl InternalEmulationState {
         latest_frame_snapshot_rgba()
     }
 
+    pub fn drain_audio_chunk(
+        &self,
+        max_frames: Option<usize>,
+    ) -> Result<InternalAudioChunk, String> {
+        let chunk = drain_audio_chunk(max_frames)?;
+        let audio_info = audio_info()?;
+        self.update_status(|status| {
+            status.audio_info = audio_info;
+        })?;
+        Ok(chunk)
+    }
+
+    pub fn clear_audio_buffer(&self) -> Result<InternalRuntimeStatus, String> {
+        let audio_info = clear_audio_buffer()?;
+        self.update_status(|status| {
+            status.audio_info = audio_info;
+        })
+    }
+
     pub fn set_joypad_button(
         &self,
         request: SetJoypadButtonRequest,
@@ -72,6 +94,7 @@ impl InternalEmulationState {
         self.clear_host()?;
         reset_input_state();
         reset_video_state();
+        reset_audio_state();
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::Prepared;
             status.core = Some(request.core);
@@ -85,6 +108,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.audio_info = InternalAudioInfo::default();
+            status.av_info = None;
             status.save_memory = Vec::new();
             status.last_save_operation = autosave_result;
             status.is_core_loaded = false;
@@ -113,6 +138,7 @@ impl InternalEmulationState {
 
         reset_input_state();
         reset_video_state();
+        reset_audio_state();
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::CoreLoaded;
             status.core_info = Some(core_info);
@@ -122,6 +148,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.audio_info = InternalAudioInfo::default();
+            status.av_info = None;
             status.save_memory = Vec::new();
             status.last_save_operation = autosave_result;
             status.is_core_loaded = true;
@@ -152,6 +180,7 @@ impl InternalEmulationState {
 
         reset_input_state();
         reset_video_state();
+        reset_audio_state();
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::CoreInitialized;
             status.environment_info = Some(environment_info);
@@ -160,6 +189,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.audio_info = InternalAudioInfo::default();
+            status.av_info = None;
             status.save_memory = Vec::new();
             status.last_save_operation = None;
             status.is_core_loaded = true;
@@ -188,6 +219,7 @@ impl InternalEmulationState {
 
         reset_input_state();
         reset_video_state();
+        reset_audio_state();
         self.update_status(|status| {
             // The dynamic library remains loaded after deinit; only the core lifecycle
             // moves back from initialized to loaded.
@@ -198,6 +230,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.audio_info = InternalAudioInfo::default();
+            status.av_info = None;
             status.save_memory = Vec::new();
             status.last_save_operation = autosave_result;
             status.is_core_loaded = true;
@@ -215,7 +249,7 @@ impl InternalEmulationState {
             .rom_path
             .ok_or_else(|| "ROM path is not prepared.".to_string())?;
 
-        let (loaded_game, environment_info, save_memory) = {
+        let (loaded_game, environment_info, av_info, audio_info, save_memory) = {
             let mut loaded_host = self
                 .host
                 .lock()
@@ -230,12 +264,14 @@ impl InternalEmulationState {
 
             let loaded_game = host.load_game(&rom_path)?;
             let environment_info = host.environment_info();
+            let av_info = host.av_info();
+            let audio_info = host.audio_info()?;
             let save_memory = host.save_memory_info().unwrap_or_default();
-            (loaded_game, environment_info, save_memory)
+            (loaded_game, environment_info, av_info, audio_info, save_memory)
         };
 
         reset_input_state();
-        self.mark_game_loaded(loaded_game, environment_info, save_memory)
+        self.mark_game_loaded(loaded_game, environment_info, av_info, audio_info, save_memory)
     }
 
     pub fn save_memory_info(&self) -> Result<InternalRuntimeStatus, String> {
@@ -300,7 +336,7 @@ impl InternalEmulationState {
 
     pub fn step_frame(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
-        let (frame_info, environment_info, input_info) = {
+        let (frame_info, environment_info, input_info, audio_info) = {
             let mut loaded_host = self.host.lock().map_err(|_| {
                 "No se pudo avanzar un frame en el host Libretro interno.".to_string()
             })?;
@@ -319,10 +355,11 @@ impl InternalEmulationState {
             let frame_info = host.step_frame()?;
             let environment_info = host.environment_info();
             let input_info = input_info()?;
-            (frame_info, environment_info, input_info)
+            let audio_info = audio_info()?;
+            (frame_info, environment_info, input_info, audio_info)
         };
 
-        self.mark_frame_stepped(frame_info, environment_info, input_info)
+        self.mark_frame_stepped(frame_info, environment_info, input_info, audio_info)
     }
 
     pub fn run_frame_loop(
@@ -341,15 +378,22 @@ impl InternalEmulationState {
 
         let result = self.run_frame_loop_inner(&loop_config);
         let final_result = match result {
-            Ok((latest_frame, environment_info, input_info, frames_run, cancelled)) => self
-                .mark_frame_loop_finished(
-                    latest_frame,
-                    environment_info,
-                    input_info,
-                    &loop_config,
-                    frames_run,
-                    cancelled,
-                ),
+            Ok((
+                latest_frame,
+                environment_info,
+                input_info,
+                audio_info,
+                frames_run,
+                cancelled,
+            )) => self.mark_frame_loop_finished(
+                latest_frame,
+                environment_info,
+                input_info,
+                audio_info,
+                &loop_config,
+                frames_run,
+                cancelled,
+            ),
             Err(error) => {
                 let _ = self.mark_frame_loop_failed(&loop_config, &error);
                 Err(error)
@@ -407,6 +451,7 @@ impl InternalEmulationState {
 
         reset_input_state();
         reset_video_state();
+        reset_audio_state();
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::CoreInitialized;
             status.environment_info = Some(environment_info);
@@ -415,6 +460,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.audio_info = InternalAudioInfo::default();
+            status.av_info = None;
             status.save_memory = Vec::new();
             status.last_save_operation = autosave_result;
             status.is_core_loaded = true;
@@ -440,6 +487,7 @@ impl InternalEmulationState {
         self.clear_host()?;
         reset_input_state();
         reset_video_state();
+        reset_audio_state();
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::Stopped;
             status.core_info = None;
@@ -449,6 +497,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.audio_info = InternalAudioInfo::default();
+            status.av_info = None;
             status.save_memory = Vec::new();
             status.last_save_operation = autosave_result;
             status.is_core_loaded = false;
@@ -465,6 +515,7 @@ impl InternalEmulationState {
         self.clear_host()?;
         reset_input_state();
         reset_video_state();
+        reset_audio_state();
         self.update_status(|status| {
             *status = InternalRuntimeStatus::default();
             status.last_save_operation = autosave_result;
@@ -502,6 +553,8 @@ impl InternalEmulationState {
         &self,
         loaded_game: InternalLoadedGameInfo,
         environment_info: InternalEnvironmentInfo,
+        av_info: Option<InternalSystemAvInfo>,
+        audio_info: InternalAudioInfo,
         save_memory: Vec<InternalSaveMemoryInfo>,
     ) -> Result<InternalRuntimeStatus, String> {
         self.update_status(|status| {
@@ -512,6 +565,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.audio_info = audio_info;
+            status.av_info = av_info;
             status.save_memory = save_memory;
             status.last_save_operation = None;
             status.is_core_loaded = true;
@@ -527,11 +582,13 @@ impl InternalEmulationState {
         frame_info: InternalFrameInfo,
         environment_info: InternalEnvironmentInfo,
         input_info: InternalInputInfo,
+        audio_info: InternalAudioInfo,
     ) -> Result<InternalRuntimeStatus, String> {
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::RomLoaded;
             status.environment_info = Some(environment_info);
             status.input_info = input_info;
+            status.audio_info = audio_info;
             status.stepped_frames = frame_info.frame_number;
             status.latest_frame = Some(frame_info);
             status.is_core_loaded = true;
@@ -550,6 +607,7 @@ impl InternalEmulationState {
             Option<InternalFrameInfo>,
             InternalEnvironmentInfo,
             InternalInputInfo,
+            InternalAudioInfo,
             u64,
             bool,
         ),
@@ -591,6 +649,7 @@ impl InternalEmulationState {
             let frame_info = host.step_frame()?;
             let environment_info = host.environment_info();
             let input_info = input_info()?;
+            let audio_info = audio_info()?;
             frames_run += 1;
 
             self.update_status(|status| {
@@ -598,6 +657,7 @@ impl InternalEmulationState {
                 status.stepped_frames = frame_info.frame_number;
                 status.environment_info = Some(environment_info);
                 status.input_info = input_info;
+                status.audio_info = audio_info;
                 status.is_running = true;
                 if let Some(frame_loop) = status.frame_loop.as_mut() {
                     frame_loop.frames_run = frames_run;
@@ -622,6 +682,7 @@ impl InternalEmulationState {
             latest_frame,
             host.environment_info(),
             input_info()?,
+            audio_info()?,
             frames_run,
             cancelled,
         ))
@@ -651,6 +712,7 @@ impl InternalEmulationState {
         latest_frame: Option<InternalFrameInfo>,
         environment_info: InternalEnvironmentInfo,
         input_info: InternalInputInfo,
+        audio_info: InternalAudioInfo,
         loop_config: &FrameLoopConfig,
         frames_run: u64,
         cancelled: bool,
@@ -659,6 +721,7 @@ impl InternalEmulationState {
             status.phase = InternalRuntimePhase::RomLoaded;
             status.environment_info = Some(environment_info);
             status.input_info = input_info;
+            status.audio_info = audio_info;
             if let Some(latest_frame) = latest_frame {
                 status.stepped_frames = latest_frame.frame_number;
                 status.latest_frame = Some(latest_frame);

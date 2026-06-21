@@ -360,6 +360,17 @@ The internal debug preview reports whether its frontend render loop is active to
 
 This avoids calling internal teardown/autosave commands while the Rust host is actively executing a bounded frame batch. The guard is frontend coordination only; it does not change backend lifecycle rules, add Tauri commands, or make the debug loop the final gameplay runtime.
 
+### Debug Audio Pipeline
+
+The internal Libretro debug path now captures minimal audio for smoke testing:
+
+- Libretro audio callbacks copy interleaved stereo PCM `i16` samples into a bounded Rust buffer.
+- The frontend drains chunks explicitly through a Tauri command after manual frames or bounded debug batches.
+- The React debug preview can opt into Web Audio playback after a user gesture.
+- The buffer drops oldest samples when it reaches its cap so `retro_run` is not blocked by unbounded audio growth.
+
+This is not the final audio system. It does not implement native streaming, audio/video synchronization, `internal_runtime_start`, pause/resume, or a native output device. Legacy external emulator mode is unchanged.
+
 ### Mode-Aware Runtime UI
 
 The play screen now separates legacy external emulator controls from internal Libretro controls.

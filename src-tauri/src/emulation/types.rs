@@ -35,6 +35,8 @@ pub struct InternalRuntimeStatus {
     pub stepped_frames: u64,
     pub frame_loop: Option<InternalFrameLoopInfo>,
     pub input_info: InternalInputInfo,
+    pub audio_info: InternalAudioInfo,
+    pub av_info: Option<InternalSystemAvInfo>,
     pub save_memory: Vec<InternalSaveMemoryInfo>,
     pub last_save_operation: Option<InternalSaveOperationResult>,
     pub is_core_loaded: bool,
@@ -59,6 +61,8 @@ impl Default for InternalRuntimeStatus {
             stepped_frames: 0,
             frame_loop: None,
             input_info: InternalInputInfo::default(),
+            audio_info: InternalAudioInfo::default(),
+            av_info: None,
             save_memory: Vec::new(),
             last_save_operation: None,
             is_core_loaded: false,
@@ -173,6 +177,37 @@ pub struct InternalFrameLoopInfo {
     pub max_frames: Option<u32>,
     pub frames_run: u64,
     pub last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalAudioInfo {
+    pub sample_rate: f64,
+    pub buffered_frames: usize,
+    pub total_frames_captured: u64,
+    pub total_frames_drained: u64,
+    pub dropped_frames: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalAudioChunk {
+    pub sample_rate: f64,
+    pub channels: u8,
+    pub frames: usize,
+    pub samples: Vec<i16>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalSystemAvInfo {
+    pub fps: f64,
+    pub sample_rate: f64,
+    pub base_width: u32,
+    pub base_height: u32,
+    pub max_width: u32,
+    pub max_height: u32,
+    pub aspect_ratio: f32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

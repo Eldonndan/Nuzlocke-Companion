@@ -2,7 +2,8 @@ mod emulation;
 
 use emulation::commands::{
     internal_runtime_cancel_frame_loop, internal_runtime_clear_joypad_buttons,
-    internal_runtime_deinit_core, internal_runtime_get_status,
+    internal_runtime_clear_audio_buffer, internal_runtime_deinit_core,
+    internal_runtime_drain_audio_chunk, internal_runtime_get_status,
     internal_runtime_get_latest_frame_snapshot, internal_runtime_init_core,
     internal_runtime_load_core, internal_runtime_load_game, internal_runtime_pause,
     internal_runtime_prepare, internal_runtime_reset, internal_runtime_resume,
@@ -1519,6 +1520,8 @@ pub fn run() {
             resize_docked_emulator,
             internal_runtime_get_status,
             internal_runtime_get_latest_frame_snapshot,
+            internal_runtime_drain_audio_chunk,
+            internal_runtime_clear_audio_buffer,
             internal_runtime_prepare,
             internal_runtime_load_core,
             internal_runtime_init_core,

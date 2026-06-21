@@ -112,6 +112,31 @@ export type InternalFrameLoopInfo = {
   lastError?: string | null;
 };
 
+export type InternalAudioInfo = {
+  sampleRate: number;
+  bufferedFrames: number;
+  totalFramesCaptured: number;
+  totalFramesDrained: number;
+  droppedFrames: number;
+};
+
+export type InternalAudioChunk = {
+  sampleRate: number;
+  channels: number;
+  frames: number;
+  samples: number[];
+};
+
+export type InternalSystemAvInfo = {
+  fps: number;
+  sampleRate: number;
+  baseWidth: number;
+  baseHeight: number;
+  maxWidth: number;
+  maxHeight: number;
+  aspectRatio: number;
+};
+
 export type InternalRuntimeStatus = {
   phase: InternalRuntimePhase;
   core?: string | null;
@@ -125,6 +150,8 @@ export type InternalRuntimeStatus = {
   steppedFrames: number;
   frameLoop?: InternalFrameLoopInfo | null;
   inputInfo: InternalInputInfo;
+  audioInfo: InternalAudioInfo;
+  avInfo?: InternalSystemAvInfo | null;
   saveMemory: InternalSaveMemoryInfo[];
   lastSaveOperation?: InternalSaveOperationResult | null;
   isCoreLoaded: boolean;
@@ -149,6 +176,16 @@ export function getLatestInternalRuntimeFrameSnapshot() {
   return invoke<InternalFrameSnapshot | null>(
     "internal_runtime_get_latest_frame_snapshot",
   );
+}
+
+export function drainInternalRuntimeAudioChunk(maxFrames = 4096) {
+  return invoke<InternalAudioChunk>("internal_runtime_drain_audio_chunk", {
+    maxFrames,
+  });
+}
+
+export function clearInternalRuntimeAudioBuffer() {
+  return invoke<InternalRuntimeStatus>("internal_runtime_clear_audio_buffer");
 }
 
 export function prepareInternalRuntime(request: PrepareInternalRuntimeRequest) {

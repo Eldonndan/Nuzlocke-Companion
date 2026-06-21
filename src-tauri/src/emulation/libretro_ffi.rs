@@ -4,9 +4,10 @@ use std::ptr;
 
 use libloading::Library;
 
+use super::audio::{audio_sample_batch_callback, audio_sample_callback};
 use super::environment::environment_callback;
 use super::input::{input_poll_callback, input_state_callback};
-use super::types::InternalCoreInfo;
+use super::types::{InternalCoreInfo, InternalSystemAvInfo};
 use super::video::video_refresh_callback;
 
 #[repr(C)]
@@ -27,8 +28,33 @@ pub struct RetroGameInfo {
     pub meta: *const c_char,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RetroGameGeometry {
+    pub base_width: c_uint,
+    pub base_height: c_uint,
+    pub max_width: c_uint,
+    pub max_height: c_uint,
+    pub aspect_ratio: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RetroSystemTiming {
+    pub fps: f64,
+    pub sample_rate: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RetroSystemAvInfo {
+    pub geometry: RetroGameGeometry,
+    pub timing: RetroSystemTiming,
+}
+
 type RetroApiVersion = unsafe extern "C" fn() -> c_uint;
 type RetroGetSystemInfo = unsafe extern "C" fn(*mut RetroSystemInfo);
+type RetroGetSystemAvInfo = unsafe extern "C" fn(*mut RetroSystemAvInfo);
 pub type RetroEnvironment = unsafe extern "C" fn(cmd: c_uint, data: *mut c_void) -> bool;
 type RetroVideoRefresh =
     unsafe extern "C" fn(data: *const c_void, width: c_uint, height: c_uint, pitch: usize);
@@ -54,6 +80,7 @@ type RetroGetMemorySize = unsafe extern "C" fn(id: c_uint) -> usize;
 pub struct LibretroCoreSymbols {
     retro_api_version: RetroApiVersion,
     retro_get_system_info: RetroGetSystemInfo,
+    retro_get_system_av_info: RetroGetSystemAvInfo,
     retro_set_environment: RetroSetEnvironment,
     retro_set_video_refresh: RetroSetVideoRefresh,
     retro_set_audio_sample: RetroSetAudioSample,
@@ -78,6 +105,7 @@ impl LibretroCoreSymbols {
             Ok(Self {
                 retro_api_version: load_symbol(library, b"retro_api_version\0")?,
                 retro_get_system_info: load_symbol(library, b"retro_get_system_info\0")?,
+                retro_get_system_av_info: load_symbol(library, b"retro_get_system_av_info\0")?,
                 retro_set_environment: load_symbol(library, b"retro_set_environment\0")?,
                 retro_set_video_refresh: load_symbol(library, b"retro_set_video_refresh\0")?,
                 retro_set_audio_sample: load_symbol(library, b"retro_set_audio_sample\0")?,
@@ -133,7 +161,8 @@ impl LibretroCoreSymbols {
         // it handles incoming pointers with null checks internally. The video callback
         // copies transient frame bytes into Rust-owned memory, input callbacks read
         // controlled global Joypad state for the single active core, and audio
-        // callbacks remain no-op stubs until the real audio pipeline is implemented.
+        // callbacks copy PCM samples into a bounded Rust buffer without storing
+        // pointers from the core.
         unsafe {
             (self.retro_set_environment)(environment_callback);
             (self.retro_set_video_refresh)(video_refresh_callback);
@@ -184,6 +213,39 @@ impl LibretroCoreSymbols {
         }
     }
 
+    pub fn system_av_info(&self) -> InternalSystemAvInfo {
+        let mut av_info = RetroSystemAvInfo {
+            geometry: RetroGameGeometry {
+                base_width: 0,
+                base_height: 0,
+                max_width: 0,
+                max_height: 0,
+                aspect_ratio: 0.0,
+            },
+            timing: RetroSystemTiming {
+                fps: 0.0,
+                sample_rate: 0.0,
+            },
+        };
+
+        // SAFETY: Libretro documents `retro_get_system_av_info` as callable after
+        // content is loaded. We pass a valid mutable pointer to a C-compatible
+        // struct and copy the scalar fields into an owned serializable value.
+        unsafe {
+            (self.retro_get_system_av_info)(&mut av_info);
+        }
+
+        InternalSystemAvInfo {
+            fps: av_info.timing.fps,
+            sample_rate: av_info.timing.sample_rate,
+            base_width: av_info.geometry.base_width,
+            base_height: av_info.geometry.base_height,
+            max_width: av_info.geometry.max_width,
+            max_height: av_info.geometry.max_height,
+            aspect_ratio: av_info.geometry.aspect_ratio,
+        }
+    }
+
     pub fn memory_data(&self, id: c_uint) -> *mut c_void {
         // SAFETY: `LibretroHost` calls this only after a core is initialized and
         // content is loaded. The returned pointer is owned by the core and must be
@@ -230,15 +292,4 @@ fn c_string_to_owned(value: *const c_char) -> Option<String> {
     } else {
         Some(text)
     }
-}
-
-unsafe extern "C" fn audio_sample_callback(left: i16, right: i16) {
-    let _ = (left, right);
-}
-
-unsafe extern "C" fn audio_sample_batch_callback(data: *const i16, frames: usize) -> usize {
-    let _ = data;
-    // Report all frames as consumed so cores do not retry audio that this spike
-    // intentionally discards until the real audio pipeline exists.
-    frames
 }

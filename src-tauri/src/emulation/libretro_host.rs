@@ -5,14 +5,16 @@ use std::path::Path;
 
 use libloading::Library;
 
+use super::audio::{audio_info, configure_audio, reset_audio_state};
 use super::environment::{
     configure_environment, environment_info, reset_environment, LibretroEnvironmentConfig,
 };
 use super::libretro_ffi::{LibretroCoreSymbols, RetroGameInfo};
 use super::saves::{ensure_save_directory, save_file_path};
 use super::types::{
-    InternalCoreInfo, InternalEnvironmentInfo, InternalFrameInfo, InternalLoadedGameInfo,
-    InternalSaveMemoryInfo, InternalSaveMemoryKind, InternalSaveOperationResult,
+    InternalAudioInfo, InternalCoreInfo, InternalEnvironmentInfo, InternalFrameInfo,
+    InternalLoadedGameInfo, InternalSaveMemoryInfo, InternalSaveMemoryKind,
+    InternalSaveOperationResult, InternalSystemAvInfo,
 };
 use super::video::{
     latest_frame_info, prepare_video_frame_capture, reset_video_state, take_video_error,
@@ -31,6 +33,7 @@ pub struct LibretroHost {
     initialized: bool,
     loaded_game: Option<LoadedGame>,
     save_directory: Option<String>,
+    av_info: Option<InternalSystemAvInfo>,
 }
 
 struct LoadedGame {
@@ -75,6 +78,7 @@ impl LibretroHost {
             initialized: false,
             loaded_game: None,
             save_directory: config.save_directory,
+            av_info: None,
         })
     }
 
@@ -84,6 +88,14 @@ impl LibretroHost {
 
     pub fn environment_info(&self) -> InternalEnvironmentInfo {
         environment_info()
+    }
+
+    pub fn av_info(&self) -> Option<InternalSystemAvInfo> {
+        self.av_info.clone()
+    }
+
+    pub fn audio_info(&self) -> Result<InternalAudioInfo, String> {
+        audio_info()
     }
 
     pub fn init_core(&mut self) -> Result<(), String> {
@@ -128,8 +140,14 @@ impl LibretroHost {
             return Err("Libretro core rejected the ROM in retro_load_game.".into());
         }
 
+        let av_info = self.symbols.system_av_info();
+        if let Err(error) = configure_audio(av_info.sample_rate) {
+            self.symbols.unload_game();
+            return Err(error);
+        }
         let info = loaded_game.info();
         self.loaded_game = Some(loaded_game);
+        self.av_info = Some(av_info);
         Ok(info)
     }
 
@@ -159,6 +177,8 @@ impl LibretroHost {
 
         self.symbols.unload_game();
         self.loaded_game = None;
+        self.av_info = None;
+        reset_audio_state();
         Ok(())
     }
 
@@ -340,6 +360,7 @@ impl Drop for LibretroHost {
     fn drop(&mut self) {
         let _ = self.deinit_core();
         reset_video_state();
+        reset_audio_state();
         reset_environment();
     }
 }
