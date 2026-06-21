@@ -174,8 +174,16 @@ h3 {
   grid-template-rows: auto auto minmax(0, 1fr) minmax(180px, 260px) auto auto;
 }
 
+.play-screen--internal-playable {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
 .play-screen--internal-debug-collapsed {
   grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+}
+
+.play-screen--internal-playable.play-screen--internal-debug-collapsed {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
 .play-topbar,
@@ -551,6 +559,100 @@ h3 {
 
 .play-screen--internal .play-layout {
   min-height: 0;
+}
+
+.internal-play-layout {
+  display: grid;
+  grid-template-columns: minmax(720px, 1fr) minmax(320px, 380px);
+  gap: 12px;
+  min-height: 0;
+}
+
+.internal-play-side-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(168, 207, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(10, 24, 45, 0.82);
+}
+
+.internal-play-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
+}
+
+.internal-play-tab {
+  min-width: 0;
+  border: 1px solid rgba(168, 207, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #c6ddf5;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 8px 6px;
+}
+
+.internal-play-tab--active {
+  border-color: rgba(80, 215, 166, 0.5);
+  background: rgba(80, 215, 166, 0.16);
+  color: #bdf7dc;
+}
+
+.internal-play-tab-panel {
+  min-height: 0;
+  overflow: auto;
+  padding: 0 8px 8px;
+}
+
+.internal-play-tab-panel:empty {
+  display: none;
+}
+
+.internal-play-debug-controller {
+  min-height: 0;
+  overflow: auto;
+  padding: 0 8px 8px;
+}
+
+.internal-play-debug-controller .internal-frame-preview {
+  max-height: none;
+}
+
+.internal-play-debug-controller--compact {
+  overflow: visible;
+}
+
+.internal-run-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.internal-runtime-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #c6ddf5;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.internal-runtime-summary > strong,
+.internal-runtime-summary > span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 5px 9px;
+}
+
+.internal-runtime-summary > strong {
+  color: #bdf7dc;
 }
 
 .gameplay-frame {

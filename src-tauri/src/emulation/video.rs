@@ -1,8 +1,11 @@
 use std::os::raw::{c_uint, c_void};
 use std::sync::{Mutex, OnceLock};
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
+
 use super::environment::environment_info;
-use super::types::{InternalFrameInfo, InternalFrameSnapshot};
+use super::types::{InternalFrameInfo, InternalFrameSnapshot, InternalFrameSnapshotBase64};
 
 const MAX_FRAME_BYTES: usize = 64 * 1024 * 1024;
 const MAX_RGBA_BYTES: usize = 64 * 1024 * 1024;
@@ -52,6 +55,20 @@ pub fn latest_frame_snapshot_rgba() -> Result<Option<InternalFrameSnapshot>, Str
         .map_err(|_| "No se pudo leer el snapshot de video interno.".to_string())?;
 
     state.latest_frame_snapshot_rgba()
+}
+
+pub fn latest_frame_snapshot_rgba_base64() -> Result<Option<InternalFrameSnapshotBase64>, String> {
+    let Some(snapshot) = latest_frame_snapshot_rgba()? else {
+        return Ok(None);
+    };
+
+    Ok(Some(InternalFrameSnapshotBase64 {
+        info: snapshot.info,
+        width: snapshot.width,
+        height: snapshot.height,
+        rgba_base64: STANDARD.encode(snapshot.rgba),
+        rgba_byte_len: snapshot.rgba_byte_len,
+    }))
 }
 
 pub fn take_video_error() -> Result<Option<String>, String> {
@@ -135,10 +152,7 @@ impl VideoState {
 
         self.latest_callback = Some(info.clone());
         if let Some(bytes) = bytes {
-            self.latest_renderable_frame = Some(CapturedFrame {
-                info,
-                bytes,
-            });
+            self.latest_renderable_frame = Some(CapturedFrame { info, bytes });
         }
         self.last_error = None;
         Ok(())

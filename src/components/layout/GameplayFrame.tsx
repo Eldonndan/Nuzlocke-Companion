@@ -7,7 +7,10 @@ import {
   useRef,
 } from "react";
 import type { CapturedFrame, LiveCaptureFrame } from "../../shared/types";
-import type { InternalFrameSnapshot } from "../../utils/internalRuntimeCommands";
+import type {
+  InternalFrameSnapshot,
+  InternalFrameSnapshotBase64,
+} from "../../utils/internalRuntimeCommands";
 
 type GameplayFrameProps = {
   gameName: string;
@@ -15,6 +18,7 @@ type GameplayFrameProps = {
   capturedFrame: CapturedFrame | null;
   liveFrame: LiveCaptureFrame | null;
   internalFrameSnapshot?: InternalFrameSnapshot | null;
+  internalFrameSnapshotBase64?: InternalFrameSnapshotBase64 | null;
   isInternalRuntime?: boolean;
   captureStatus: string;
   isCapturing: boolean;
@@ -56,12 +60,24 @@ function focusKeyboardTarget(event: MouseEvent<HTMLDivElement>) {
   event.currentTarget.focus();
 }
 
+function decodeBase64ToUint8ClampedArray(base64: string) {
+  const binary = window.atob(base64);
+  const bytes = new Uint8ClampedArray(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
+}
+
 export function GameplayFrame({
   gameName,
   routeName,
   capturedFrame,
   liveFrame,
   internalFrameSnapshot,
+  internalFrameSnapshotBase64,
   isInternalRuntime = false,
   captureStatus,
   isCapturing,
@@ -80,6 +96,16 @@ export function GameplayFrame({
     }
 
     const canvas = canvasRef.current;
+
+    if (isInternalRuntime && internalFrameSnapshotBase64) {
+      drawRgbaFrame(
+        canvas,
+        internalFrameSnapshotBase64.width,
+        internalFrameSnapshotBase64.height,
+        decodeBase64ToUint8ClampedArray(internalFrameSnapshotBase64.rgbaBase64),
+      );
+      return;
+    }
 
     if (isInternalRuntime && internalFrameSnapshot) {
       drawRgbaFrame(
@@ -103,9 +129,11 @@ export function GameplayFrame({
     }
 
     drawRgbaFrame(canvas, liveFrame.width, liveFrame.height, pixels);
-  }, [internalFrameSnapshot, isInternalRuntime, liveFrame]);
+  }, [internalFrameSnapshot, internalFrameSnapshotBase64, isInternalRuntime, liveFrame]);
 
-  const hasInternalFrame = Boolean(isInternalRuntime && internalFrameSnapshot);
+  const hasInternalFrame = Boolean(
+    isInternalRuntime && (internalFrameSnapshotBase64 || internalFrameSnapshot),
+  );
   const hasLiveFrame = Boolean(liveFrame);
   const shouldRenderCanvas = hasInternalFrame || hasLiveFrame;
 

@@ -3,8 +3,9 @@ use tauri::State;
 use super::libretro_host::{LibretroHost, LibretroHostConfig};
 use super::state::InternalEmulationState;
 use super::types::{
-    InternalAudioChunk, InternalFrameSnapshot, InternalRuntimeStatus, InternalSaveMemoryKind,
-    PrepareInternalRuntimeRequest, RunFrameLoopRequest, SetJoypadButtonRequest,
+    InternalAudioChunk, InternalFrameSnapshot, InternalFrameSnapshotBase64, InternalRuntimeStatus,
+    InternalSaveMemoryKind, PrepareInternalRuntimeRequest, RunFrameLoopRequest,
+    SetJoypadButtonRequest,
 };
 
 const NOT_IMPLEMENTED: &str = "Internal Libretro runtime is not implemented yet.";
@@ -21,6 +22,13 @@ pub fn internal_runtime_get_latest_frame_snapshot(
     state: State<'_, InternalEmulationState>,
 ) -> Result<Option<InternalFrameSnapshot>, String> {
     state.latest_frame_snapshot()
+}
+
+#[tauri::command]
+pub fn internal_runtime_get_latest_frame_snapshot_base64(
+    state: State<'_, InternalEmulationState>,
+) -> Result<InternalFrameSnapshotBase64, String> {
+    state.latest_frame_snapshot_base64()
 }
 
 #[tauri::command]

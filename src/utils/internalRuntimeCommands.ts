@@ -55,6 +55,14 @@ export type InternalFrameSnapshot = {
   rgbaByteLen: number;
 };
 
+export type InternalFrameSnapshotBase64 = {
+  info: InternalFrameInfo;
+  width: number;
+  height: number;
+  rgbaBase64: string;
+  rgbaByteLen: number;
+};
+
 export type InternalJoypadButton =
   | "a"
   | "b"
@@ -175,6 +183,12 @@ export function getInternalRuntimeStatus() {
 export function getLatestInternalRuntimeFrameSnapshot() {
   return invoke<InternalFrameSnapshot | null>(
     "internal_runtime_get_latest_frame_snapshot",
+  );
+}
+
+export function getLatestInternalRuntimeFrameSnapshotBase64() {
+  return invoke<InternalFrameSnapshotBase64>(
+    "internal_runtime_get_latest_frame_snapshot_base64",
   );
 }
 

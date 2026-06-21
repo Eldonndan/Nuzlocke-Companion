@@ -4,6 +4,10 @@ import { EmulatorConfigPanel } from "../components/emulator/EmulatorConfigPanel"
 import { InternalRuntimeFramePreview } from "../components/emulator/InternalRuntimeFramePreview";
 import { QuickEditPanel } from "../components/edit/QuickEditPanel";
 import { GameplayFrame } from "../components/layout/GameplayFrame";
+import {
+  InternalPlaySidePanel,
+  type InternalPlayTab,
+} from "../components/layout/InternalPlaySidePanel";
 import { BadgePanel } from "../components/status/BadgePanel";
 import { CaptureStatusPanel } from "../components/status/CaptureStatusPanel";
 import { LevelCapPanel } from "../components/status/LevelCapPanel";
@@ -55,7 +59,7 @@ import {
   loadSavedRun,
   saveRun,
 } from "../utils/runStorage";
-import type { InternalFrameSnapshot } from "../utils/internalRuntimeCommands";
+import type { InternalFrameSnapshotBase64 } from "../utils/internalRuntimeCommands";
 import { stopInternalRuntime } from "../utils/internalRuntimeCommands";
 import {
   createDefaultLegacyExternalRuntimeConfig,
@@ -166,12 +170,14 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const [sessionStatus, setSessionStatus] = useState("");
   const [capturedFrame, setCapturedFrame] = useState<CapturedFrame | null>(null);
   const [liveFrame, setLiveFrame] = useState<LiveCaptureFrame | null>(null);
-  const [internalFrameSnapshot, setInternalFrameSnapshot] =
-    useState<InternalFrameSnapshot | null>(null);
+  const [internalFrameSnapshotBase64, setInternalFrameSnapshotBase64] =
+    useState<InternalFrameSnapshotBase64 | null>(null);
   const [isInternalDebugLoopRunning, setIsInternalDebugLoopRunning] =
     useState(false);
   const [isInternalDebugPanelCollapsed, setIsInternalDebugPanelCollapsed] =
     useState(false);
+  const [internalPlayTab, setInternalPlayTab] =
+    useState<InternalPlayTab>("runtime");
   const [frameStatus, setFrameStatus] = useState("");
   const [captureFps, setCaptureFps] = useState<CaptureFps>(30);
   const [captureSession, setCaptureSession] = useState<CaptureSessionStatus | null>(null);
@@ -418,7 +424,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     setCaptureSession(null);
     setIsCaptureSessionRunning(false);
     setDockedWindow(null);
-    setInternalFrameSnapshot(null);
+    setInternalFrameSnapshotBase64(null);
     setRunState((currentRun) => ({
       ...withRunRuntimeConfig(currentRun, config),
       captureWindow: undefined,
@@ -1048,7 +1054,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     setEditingSlotIndex(null);
     setCapturedFrame(null);
     setLiveFrame(null);
-    setInternalFrameSnapshot(null);
+    setInternalFrameSnapshotBase64(null);
     setRunState(cloneRunState(run));
     setSaveStatus("Guardado local");
     setWindowStatus("Ventana de juego sin detectar");
@@ -1067,7 +1073,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     void stopNativeCapture("Captura detenida");
     void hideOverlay();
     void undockCurrentGame();
-    setInternalFrameSnapshot(null);
+    setInternalFrameSnapshotBase64(null);
     onExit();
   };
 
@@ -1150,7 +1156,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     }
 
     if (!isInternalRuntime) {
-      setInternalFrameSnapshot(null);
+      setInternalFrameSnapshotBase64(null);
       setIsInternalDebugLoopRunning(false);
       setIsInternalDebugPanelCollapsed(false);
     }
@@ -1215,8 +1221,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       className={
         isInternalRuntime
           ? isInternalDebugPanelCollapsed
-            ? "play-screen play-screen--internal play-screen--internal-debug-collapsed"
-            : "play-screen play-screen--internal"
+            ? "play-screen play-screen--internal play-screen--internal-playable play-screen--internal-debug-collapsed"
+            : "play-screen play-screen--internal play-screen--internal-playable"
           : "play-screen"
       }
     >
@@ -1375,33 +1381,91 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
         )}
       </section>
 
-      <section className="play-layout" aria-label="Diseño principal">
-        <GameplayFrame
-          gameName={runState.gameName}
-          routeName={runState.currentRoute.name}
-          capturedFrame={isLegacyRuntime ? capturedFrame : null}
-          liveFrame={isLegacyRuntime ? liveFrame : null}
-          internalFrameSnapshot={
-            isInternalRuntime ? internalFrameSnapshot : null
-          }
-          isInternalRuntime={isInternalRuntime}
-          captureStatus={frameStatus}
-          isCapturing={isCaptureSessionRunning}
-          screenRef={gameplayScreenRef}
-          isKeyboardInputEnabled={isInternalRuntime}
-        />
-        <TeamPanel team={runState.team} onEditSlot={setEditingSlotIndex} />
-      </section>
-
       {isInternalRuntime ? (
-        <InternalRuntimeFramePreview
-          runtimeConfig={runtimeConfig}
-          onFrameSnapshot={setInternalFrameSnapshot}
-          onDebugLoopRunningChange={setIsInternalDebugLoopRunning}
-          onDebugPanelCollapsedChange={setIsInternalDebugPanelCollapsed}
-          keyboardTargetRef={gameplayScreenRef}
-        />
-      ) : null}
+        <section className="internal-play-layout" aria-label="Modo interno">
+          <GameplayFrame
+            gameName={runState.gameName}
+            routeName={runState.currentRoute.name}
+            capturedFrame={null}
+            liveFrame={null}
+            internalFrameSnapshotBase64={internalFrameSnapshotBase64}
+            isInternalRuntime
+            captureStatus={frameStatus}
+            isCapturing={false}
+            screenRef={gameplayScreenRef}
+            isKeyboardInputEnabled
+          />
+          <InternalPlaySidePanel
+            activeTab={internalPlayTab}
+            onTabChange={setInternalPlayTab}
+            teamPanel={
+              <TeamPanel team={runState.team} onEditSlot={setEditingSlotIndex} />
+            }
+            runPanel={
+              <div className="internal-run-controls">
+                <LivesCounter
+                  lives={runState.lives}
+                  onDecrease={() => updateLives(-1)}
+                  onIncrease={() => updateLives(1)}
+                />
+                <BadgePanel badges={runState.badges} onToggleBadge={toggleBadge} />
+                <LevelCapPanel
+                  levelCap={runState.levelCap}
+                  onChange={updateLevelCap}
+                />
+                <RoutePanel
+                  routeName={runState.currentRoute.name}
+                  onChange={updateRoute}
+                />
+                <CaptureStatusPanel
+                  status={runState.captureStatus}
+                  onCycle={cycleCaptureStatus}
+                />
+              </div>
+            }
+            runtimePanel={
+              <div className="internal-runtime-summary">
+                <strong>Runtime interno</strong>
+                <span>{runtimeConfig.corePath ? "Core configurado" : "Sin core"}</span>
+                <span>{runtimeConfig.romPath ? "ROM configurada" : "Sin ROM"}</span>
+                <span>
+                  {runtimeConfig.saveDirectory
+                    ? "Directorio de guardado configurado"
+                    : "Sin directorio de guardado"}
+                </span>
+                <span>
+                  Experimental: todavia usa runtime debug y snapshots por invoke.
+                </span>
+              </div>
+            }
+            debugController={
+              <InternalRuntimeFramePreview
+                runtimeConfig={runtimeConfig}
+                onFrameSnapshotBase64={setInternalFrameSnapshotBase64}
+                onDebugLoopRunningChange={setIsInternalDebugLoopRunning}
+                onDebugPanelCollapsedChange={setIsInternalDebugPanelCollapsed}
+                isCollapsed={internalPlayTab !== "debug"}
+                showCollapseToggle={false}
+                keyboardTargetRef={gameplayScreenRef}
+              />
+            }
+          />
+        </section>
+      ) : (
+        <section className="play-layout" aria-label="Diseño principal">
+          <GameplayFrame
+            gameName={runState.gameName}
+            routeName={runState.currentRoute.name}
+            capturedFrame={capturedFrame}
+            liveFrame={liveFrame}
+            isInternalRuntime={false}
+            captureStatus={frameStatus}
+            isCapturing={isCaptureSessionRunning}
+            screenRef={gameplayScreenRef}
+          />
+          <TeamPanel team={runState.team} onEditSlot={setEditingSlotIndex} />
+        </section>
+      )}
 
       <div className="emulator-status" aria-live="polite">
         {isInternalRuntime ? (
@@ -1416,8 +1480,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
             </span>
             {isInternalDebugLoopRunning ? (
               <strong>
-                Loop debug activo: deténlo antes de cambiar runtime, resetear o
-                salir.
+                Sesion interna experimental activa: detenla antes de cambiar
+                runtime, resetear o salir.
               </strong>
             ) : null}
           </>
@@ -1446,6 +1510,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
         {sessionStatus ? <strong>{sessionStatus}</strong> : null}
       </div>
 
+      {isLegacyRuntime ? (
       <footer className="status-bar" aria-label="Estado de la run">
         <LivesCounter
           lives={runState.lives}
@@ -1466,6 +1531,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           onCycle={cycleCaptureStatus}
         />
       </footer>
+      ) : null}
 
       {isEmulatorPanelOpen ? (
         <EmulatorConfigPanel

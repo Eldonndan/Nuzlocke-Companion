@@ -389,6 +389,14 @@ The internal debug panel can be collapsed into a compact gameplay bar. The colla
 
 Debug audio now drains larger bounded chunks and can drain multiple chunks per batch. If the Rust audio buffer is already far behind, the frontend clears the stale buffer instead of playing delayed samples. Web Audio scheduling is also capped to avoid building too much queued playback. This is still a debug audio path, not final synchronized emulator audio.
 
+### Internal Playable Shell
+
+Internal Libretro mode now uses a playable shell instead of a debug-panel-first layout. The main `GameplayFrame` stays fixed as the primary surface, while the right side panel exposes `Equipo`, `Run`, `Runtime`, and `Debug` tabs. Team and run controls move into the side panel in internal mode so the gameplay area keeps more vertical space. Legacy external mode keeps its existing layout.
+
+The internal runtime controller remains mounted inside the side panel even when the user is not viewing the Debug tab. Non-debug tabs show only the compact experimental session bar, so the bounded frame loop, scoped keyboard input, SRAM actions, and audio debug controls are not tied to whether the full diagnostic panel is visible.
+
+Frame snapshots now have a base64 command path in addition to the original RGBA array command. The frontend uses the base64 snapshot for internal gameplay rendering to avoid storing large `number[]` RGBA buffers in React state. This is still explicit invoke-based frame transport, not streaming, shared memory, WebGL, or the final renderer. Audio remains a debug Web Audio path.
+
 ### Mode-Aware Runtime UI
 
 The play screen now separates legacy external emulator controls from internal Libretro controls.

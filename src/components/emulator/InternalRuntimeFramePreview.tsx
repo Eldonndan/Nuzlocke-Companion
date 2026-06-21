@@ -12,7 +12,7 @@ import {
   clearInternalRuntimeAudioBuffer,
   drainInternalRuntimeAudioChunk,
   getInternalRuntimeStatus,
-  getLatestInternalRuntimeFrameSnapshot,
+  getLatestInternalRuntimeFrameSnapshotBase64,
   initInternalRuntimeCore,
   loadInternalRuntimeCore,
   loadInternalRuntimeGame,
@@ -27,6 +27,7 @@ import {
   type InternalAudioChunk,
   type InternalAudioInfo,
   type InternalFrameSnapshot,
+  type InternalFrameSnapshotBase64,
   type InternalInputInfo,
   type InternalJoypadButton,
   type InternalRuntimeStatus,
@@ -49,17 +50,30 @@ type RenderedSnapshotMeta = {
 type InternalRuntimeFramePreviewProps = {
   runtimeConfig: InternalLibretroRuntimeConfig;
   onFrameSnapshot?: (snapshot: InternalFrameSnapshot | null) => void;
+  onFrameSnapshotBase64?: (snapshot: InternalFrameSnapshotBase64 | null) => void;
   onDebugLoopRunningChange?: (isRunning: boolean) => void;
   onDebugPanelCollapsedChange?: (collapsed: boolean) => void;
+  isCollapsed?: boolean;
+  showCollapseToggle?: boolean;
   keyboardTargetRef?: RefObject<HTMLElement | null>;
 };
 
-const DEBUG_LOOP_BATCH_FRAMES = 6;
 const DEBUG_LOOP_TARGET_FPS = 60;
 const DEBUG_AUDIO_MAX_DRAIN_FRAMES = 8192;
 const DEBUG_AUDIO_MAX_DRAIN_ATTEMPTS = 3;
 const DEBUG_AUDIO_BACKLOG_RESET_FRAMES = 48_000;
 const DEBUG_AUDIO_MAX_LEAD_SECONDS = 0.25;
+
+type InternalPerformancePreset = "smooth" | "balanced" | "battery";
+
+const performancePresetConfig: Record<
+  InternalPerformancePreset,
+  { label: string; batchFrames: number; targetFps: number }
+> = {
+  smooth: { label: "Suave", batchFrames: 2, targetFps: 60 },
+  balanced: { label: "Balanceado", batchFrames: 3, targetFps: 60 },
+  battery: { label: "Ahorro", batchFrames: 6, targetFps: 60 },
+};
 
 const joypadButtons: Array<{ button: InternalJoypadButton; label: string }> = [
   { button: "up", label: "Arriba" },
@@ -128,11 +142,25 @@ function isEditableTarget(target: EventTarget | null) {
   );
 }
 
+function decodeBase64ToUint8ClampedArray(base64: string) {
+  const binary = window.atob(base64);
+  const bytes = new Uint8ClampedArray(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
+}
+
 export function InternalRuntimeFramePreview({
   runtimeConfig,
   onFrameSnapshot,
+  onFrameSnapshotBase64,
   onDebugLoopRunningChange,
   onDebugPanelCollapsedChange,
+  isCollapsed,
+  showCollapseToggle = true,
   keyboardTargetRef,
 }: InternalRuntimeFramePreviewProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -159,6 +187,8 @@ export function InternalRuntimeFramePreview({
   const [status, setStatus] = useState<PreviewStatus>("idle");
   const [message, setMessage] = useState("Sin fotograma renderizado.");
   const [isDebugPanelCollapsed, setIsDebugPanelCollapsed] = useState(false);
+  const [performancePreset, setPerformancePreset] =
+    useState<InternalPerformancePreset>("balanced");
   const [isDebugLoopRunning, setIsDebugLoopRunning] = useState(false);
   const [debugLoopFramesRendered, setDebugLoopFramesRendered] = useState(0);
   const [isKeyboardFocused, setIsKeyboardFocused] = useState(false);
@@ -174,6 +204,8 @@ export function InternalRuntimeFramePreview({
   const saveRamInfo = saveMemory.find((memory) => memory.kind === "save-ram");
   const isActionLoading = status === "loading";
   const disableLifecycleActions = isActionLoading || isDebugLoopRunning;
+  const effectiveDebugPanelCollapsed = isCollapsed ?? isDebugPanelCollapsed;
+  const activePerformancePreset = performancePresetConfig[performancePreset];
 
   const applyRuntimeStatus = (nextStatus: InternalRuntimeStatus) => {
     setRuntimeStatus(nextStatus);
@@ -231,13 +263,14 @@ export function InternalRuntimeFramePreview({
     }
   };
 
-  const renderSnapshot = (
-    nextSnapshot: InternalFrameSnapshot | null,
+  const renderSnapshotBase64 = (
+    nextSnapshot: InternalFrameSnapshotBase64 | null,
     options: { silent?: boolean } = {},
   ) => {
     if (!nextSnapshot) {
       setRenderedSnapshotMeta(null);
       onFrameSnapshot?.(null);
+      onFrameSnapshotBase64?.(null);
       setStatus("empty");
       setMessage("No hay fotograma disponible todavia.");
       return false;
@@ -252,7 +285,7 @@ export function InternalRuntimeFramePreview({
       return false;
     }
 
-    const rgba = new Uint8ClampedArray(nextSnapshot.rgba);
+    const rgba = decodeBase64ToUint8ClampedArray(nextSnapshot.rgbaBase64);
     const expectedLength = nextSnapshot.width * nextSnapshot.height * 4;
 
     if (rgba.length !== expectedLength) {
@@ -276,7 +309,7 @@ export function InternalRuntimeFramePreview({
       isDuplicate: nextSnapshot.info.isDuplicate,
       rgbaByteLen: nextSnapshot.rgbaByteLen,
     });
-    onFrameSnapshot?.(nextSnapshot);
+    onFrameSnapshotBase64?.(nextSnapshot);
     if (!options.silent) {
       setStatus("ready");
       setMessage("Frame renderizado.");
@@ -532,7 +565,7 @@ export function InternalRuntimeFramePreview({
     setMessage("Renderizando ultimo fotograma...");
 
     try {
-      renderSnapshot(await getLatestInternalRuntimeFrameSnapshot());
+      renderSnapshotBase64(await getLatestInternalRuntimeFrameSnapshotBase64());
     } catch (error) {
       setStatus("error");
       setMessage(getErrorMessage(error));
@@ -584,38 +617,38 @@ export function InternalRuntimeFramePreview({
     onDebugLoopRunningChange?.(true);
     setDebugLoopFramesRendered(0);
     setStatus("ready");
-    setMessage("Loop debug activo...");
+    setMessage("Sesion interna experimental activa...");
 
     let framesRendered = 0;
 
     try {
       while (!debugLoopCancelRequestedRef.current) {
         const nextStatus = await runInternalRuntimeFrameLoop({
-          maxFrames: DEBUG_LOOP_BATCH_FRAMES,
-          targetFps: DEBUG_LOOP_TARGET_FPS,
+          maxFrames: activePerformancePreset.batchFrames,
+          targetFps: activePerformancePreset.targetFps,
         });
         applyRuntimeStatus(nextStatus);
 
-        const nextSnapshot = await getLatestInternalRuntimeFrameSnapshot();
-        const didRenderSnapshot = renderSnapshot(nextSnapshot, { silent: true });
+        const nextSnapshot = await getLatestInternalRuntimeFrameSnapshotBase64();
+        const didRenderSnapshot = renderSnapshotBase64(nextSnapshot, { silent: true });
         await drainAndEnqueueAudio();
 
         if (!didRenderSnapshot) {
-          throw new Error("No se pudo renderizar el snapshot del loop debug.");
+          throw new Error("No se pudo renderizar el snapshot de la sesion interna.");
         }
 
         const renderedThisBatch =
-          nextStatus.frameLoop?.framesRun ?? DEBUG_LOOP_BATCH_FRAMES;
+          nextStatus.frameLoop?.framesRun ?? activePerformancePreset.batchFrames;
         framesRendered += renderedThisBatch;
         setDebugLoopFramesRendered(framesRendered);
         setStatus("ready");
         if (framesRendered % 30 === 0) {
-          setMessage(`Loop debug activo - frames: ${framesRendered}`);
+          setMessage(`Sesion interna activa - frames: ${framesRendered}`);
         }
       }
 
       setStatus("ready");
-      setMessage("Loop debug detenido.");
+      setMessage("Sesion interna detenida.");
     } catch (error) {
       debugLoopCancelRequestedRef.current = true;
 
@@ -637,7 +670,7 @@ export function InternalRuntimeFramePreview({
 
   const stopDebugRenderLoop = async () => {
     debugLoopCancelRequestedRef.current = true;
-    setMessage("Deteniendo loop debug...");
+    setMessage("Deteniendo sesion interna...");
 
     try {
       applyRuntimeStatus(await cancelInternalRuntimeFrameLoop());
@@ -845,8 +878,8 @@ export function InternalRuntimeFramePreview({
   }, [keyboardTargetRef]);
 
   useEffect(() => {
-    onDebugPanelCollapsedChange?.(isDebugPanelCollapsed);
-  }, [isDebugPanelCollapsed, onDebugPanelCollapsedChange]);
+    onDebugPanelCollapsedChange?.(effectiveDebugPanelCollapsed);
+  }, [effectiveDebugPanelCollapsed, onDebugPanelCollapsedChange]);
 
   useEffect(() => {
     return () => {
@@ -867,7 +900,7 @@ export function InternalRuntimeFramePreview({
   const previewClassName = [
     "internal-frame-preview",
     isKeyboardFocused ? "internal-frame-preview--keyboard-focused" : "",
-    isDebugPanelCollapsed ? "internal-frame-preview--collapsed" : "",
+    effectiveDebugPanelCollapsed ? "internal-frame-preview--collapsed" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -889,16 +922,18 @@ export function InternalRuntimeFramePreview({
           <h2>Vista previa de fotograma</h2>
         </div>
         <div className="internal-frame-preview__actions">
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() =>
-              setIsDebugPanelCollapsed((currentValue) => !currentValue)
-            }
-          >
-            {isDebugPanelCollapsed ? "Mostrar debug" : "Ocultar debug"}
-          </button>
-          {!isDebugPanelCollapsed ? (
+          {showCollapseToggle ? (
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() =>
+                setIsDebugPanelCollapsed((currentValue) => !currentValue)
+              }
+            >
+              {effectiveDebugPanelCollapsed ? "Mostrar debug" : "Ocultar debug"}
+            </button>
+          ) : null}
+          {!effectiveDebugPanelCollapsed ? (
             <>
           <button
             className="secondary-button"
@@ -930,17 +965,37 @@ export function InternalRuntimeFramePreview({
       </div>
 
       <div className="internal-frame-preview__compact-bar">
-        <strong>{isDebugLoopRunning ? "Loop activo" : "Loop inactivo"}</strong>
+        <strong>
+          {isDebugLoopRunning
+            ? "Sesion interna activa"
+            : "Sesion interna detenida"}
+        </strong>
         <span>{`Frames: ${debugLoopFramesRendered}`}</span>
         <span>{isAudioDebugEnabled ? "Audio activo" : "Audio apagado"}</span>
         <span>{`Buffer audio: ${audioInfo?.bufferedFrames ?? 0}`}</span>
+        <label className="internal-frame-preview__preset">
+          <span>Rendimiento</span>
+          <select
+            value={performancePreset}
+            onChange={(event) =>
+              setPerformancePreset(event.target.value as InternalPerformancePreset)
+            }
+            disabled={isDebugLoopRunning}
+          >
+            {Object.entries(performancePresetConfig).map(([value, config]) => (
+              <option key={value} value={value}>
+                {config.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           className="primary-button"
           type="button"
           onClick={() => void startDebugRenderLoop()}
           disabled={isActionLoading || isDebugLoopRunning}
         >
-          Iniciar loop
+          Iniciar juego
         </button>
         <button
           className="secondary-button"
@@ -948,7 +1003,7 @@ export function InternalRuntimeFramePreview({
           onClick={() => void stopDebugRenderLoop()}
           disabled={!isDebugLoopRunning}
         >
-          Detener loop
+          Detener
         </button>
         <button
           className="secondary-button"
@@ -979,7 +1034,7 @@ export function InternalRuntimeFramePreview({
         </button>
       </div>
 
-      {!isDebugPanelCollapsed ? (
+      {!effectiveDebugPanelCollapsed ? (
         <>
       <div className="internal-frame-preview__runtime">
         <strong>Configuracion</strong>
@@ -1096,12 +1151,13 @@ export function InternalRuntimeFramePreview({
       </div>
 
       <div className="internal-frame-preview__loop">
-        <strong>Loop debug</strong>
+        <strong>Sesion interna experimental</strong>
         <span>{isDebugLoopRunning ? "Activo" : "Inactivo"}</span>
-        <span>{`Batch: ${DEBUG_LOOP_BATCH_FRAMES} frames`}</span>
-        <span>{`Objetivo: ${DEBUG_LOOP_TARGET_FPS} FPS`}</span>
+        <span>{`Preset: ${activePerformancePreset.label}`}</span>
+        <span>{`Batch: ${activePerformancePreset.batchFrames} frames`}</span>
+        <span>{`Objetivo: ${activePerformancePreset.targetFps} FPS`}</span>
         <span>{`Renderizados: ${debugLoopFramesRendered}`}</span>
-        <span>Debug: usa invoke + RGBA completo; puede ir lento.</span>
+        <span>Experimental: todavia usa runtime debug.</span>
         <div className="internal-frame-preview__loop-buttons">
           <button
             className="primary-button"
@@ -1109,7 +1165,7 @@ export function InternalRuntimeFramePreview({
             onClick={() => void startDebugRenderLoop()}
             disabled={isActionLoading || isDebugLoopRunning}
           >
-            Iniciar loop debug
+            Iniciar juego
           </button>
           <button
             className="secondary-button"
@@ -1117,7 +1173,7 @@ export function InternalRuntimeFramePreview({
             onClick={() => void stopDebugRenderLoop()}
             disabled={!isDebugLoopRunning}
           >
-            Detener loop debug
+            Detener
           </button>
         </div>
       </div>

@@ -12,12 +12,13 @@ use super::input::{
 use super::libretro_host::LibretroHost;
 use super::types::{
     InternalAudioChunk, InternalAudioInfo, InternalCoreInfo, InternalEnvironmentInfo,
-    InternalFrameInfo, InternalFrameLoopInfo, InternalFrameSnapshot, InternalInputInfo,
-    InternalLoadedGameInfo, InternalRuntimePhase, InternalRuntimeStatus, InternalSaveMemoryInfo,
-    InternalSaveMemoryKind, InternalSaveOperationResult, InternalSystemAvInfo,
-    PrepareInternalRuntimeRequest, RunFrameLoopRequest, SetJoypadButtonRequest,
+    InternalFrameInfo, InternalFrameLoopInfo, InternalFrameSnapshot, InternalFrameSnapshotBase64,
+    InternalInputInfo, InternalLoadedGameInfo, InternalRuntimePhase, InternalRuntimeStatus,
+    InternalSaveMemoryInfo, InternalSaveMemoryKind, InternalSaveOperationResult,
+    InternalSystemAvInfo, PrepareInternalRuntimeRequest, RunFrameLoopRequest,
+    SetJoypadButtonRequest,
 };
-use super::video::{latest_frame_snapshot_rgba, reset_video_state};
+use super::video::{latest_frame_snapshot_rgba, latest_frame_snapshot_rgba_base64, reset_video_state};
 
 const MAX_FRAME_LOOP_FRAMES: u32 = 600;
 const DEFAULT_FRAME_LOOP_FPS: u32 = 60;
@@ -46,6 +47,11 @@ impl InternalEmulationState {
 
     pub fn latest_frame_snapshot(&self) -> Result<Option<InternalFrameSnapshot>, String> {
         latest_frame_snapshot_rgba()
+    }
+
+    pub fn latest_frame_snapshot_base64(&self) -> Result<InternalFrameSnapshotBase64, String> {
+        latest_frame_snapshot_rgba_base64()?
+            .ok_or_else(|| "No hay fotograma interno disponible.".to_string())
     }
 
     pub fn drain_audio_chunk(

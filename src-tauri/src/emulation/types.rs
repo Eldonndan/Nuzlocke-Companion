@@ -168,6 +168,16 @@ pub struct InternalFrameSnapshot {
     pub rgba_byte_len: usize,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalFrameSnapshotBase64 {
+    pub info: InternalFrameInfo,
+    pub width: u32,
+    pub height: u32,
+    pub rgba_base64: String,
+    pub rgba_byte_len: usize,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InternalFrameLoopInfo {

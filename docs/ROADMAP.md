@@ -104,6 +104,7 @@ Status:
 - Improved internal runtime play layout so the main gameplay frame owns the visual area, the debug panel is scrollable, and scoped keyboard input works from the gameplay frame.
 - Made internal Libretro the default runtime for new runs and added local pickers for the Libretro core, GB/GBC/GBA ROM, and save directory.
 - Added a collapsible internal debug panel and frontend audio backlog controls for more comfortable real-play smoke tests.
+- Added an internal playable shell with side-panel tabs, base64 frame snapshots, and frontend performance presets.
 - Final continuous gameplay loop, efficient frame transport, physical input, real audio pipelines, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline
