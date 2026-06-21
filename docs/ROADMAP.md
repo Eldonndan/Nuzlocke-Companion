@@ -96,6 +96,7 @@ Status:
 - Added a frontend-only debug render loop that repeats small bounded batches and redraws RGBA snapshots until cancelled.
 - Added runtime configuration UI for choosing legacy external mode or internal Libretro mode with local core, ROM, and save-directory paths.
 - Added main `GameplayFrame` rendering for internal Libretro snapshots while keeping the debug preview as the control surface.
+- Added mode-aware play-screen UI so internal Libretro hides legacy window/capture/overlay controls and avoids stale legacy frames.
 - Final continuous gameplay loop, efficient frame transport, physical input, real audio pipelines, autosave, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline

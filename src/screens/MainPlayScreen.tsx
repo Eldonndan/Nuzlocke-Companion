@@ -78,8 +78,8 @@ const captureStatusOrder: CaptureStatus[] = [
 
 const fpsOptions: CaptureFps[] = [30, 60];
 const overlayLayoutStorageKey = "nuzlocke-companion.overlay-layout";
-const internalLibretroNotImplementedMessage =
-  "El runtime interno Libretro todavía no está implementado.";
+const legacyExternalOnlyMessage =
+  "Esta acción pertenece al modo legacy externo. El runtime interno se controla desde el panel Libretro.";
 
 type OverlayLayout = {
   x: number;
@@ -202,8 +202,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       return true;
     }
 
-    setSessionStatus(internalLibretroNotImplementedMessage);
-    setOverlayStatus(internalLibretroNotImplementedMessage);
+    setSessionStatus(legacyExternalOnlyMessage);
+    setOverlayStatus(legacyExternalOnlyMessage);
     return false;
   };
 
@@ -366,6 +366,11 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     void stopNativeCapture("Captura detenida");
     void hideOverlay();
     void undockCurrentGame();
+    setCapturedFrame(null);
+    setLiveFrame(null);
+    setCaptureSession(null);
+    setIsCaptureSessionRunning(false);
+    setDockedWindow(null);
     setInternalFrameSnapshot(null);
     setRunState((currentRun) => ({
       ...withRunRuntimeConfig(currentRun, config),
@@ -1070,6 +1075,15 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   }, [isOverlayEditing, runState.captureWindow, runState.lives, runState.captureStatus]);
 
   useEffect(() => {
+    if (isInternalRuntime) {
+      setCapturedFrame(null);
+      setLiveFrame(null);
+      setCaptureSession(null);
+      setIsCaptureSessionRunning(false);
+      setDockedWindow(null);
+      return;
+    }
+
     if (!isInternalRuntime) {
       setInternalFrameSnapshot(null);
     }
@@ -1164,77 +1178,81 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
               {hasEmulatorConfigured ? "Jugar en modo acoplado" : "Configurar emulador"}
             </button>
           )}
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={startOverlaySession}
-          >
-            Modo overlay
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={reacomodarDockedGame}
-          >
-            Reacomodar juego
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => void undockCurrentGame()}
-          >
-            Desacoplar juego
-          </button>
-          {isCaptureSessionRunning ? (
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => void stopNativeCapture("Captura detenida")}
-            >
-              Detener captura experimental
-            </button>
-          ) : (
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={startGameSession}
-            >
-              Modo captura experimental
-            </button>
-          )}
-          <label className="fps-control">
-            <span>FPS</span>
-            <select
-              value={captureFps}
-              onChange={(event) => setCaptureFps(Number(event.target.value) as CaptureFps)}
-            >
-              {fpsOptions.map((fps) => (
-                <option key={fps} value={fps}>
-                  {fps} FPS
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={detectConfiguredWindow}
-          >
-            Detectar ventana
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={captureDetectedWindowFrame}
-          >
-            Capturar frame de prueba
-          </button>
+          {isLegacyRuntime ? (
+            <>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={startOverlaySession}
+              >
+                Modo overlay
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={reacomodarDockedGame}
+              >
+                Reacomodar juego
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void undockCurrentGame()}
+              >
+                Desacoplar juego
+              </button>
+              {isCaptureSessionRunning ? (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void stopNativeCapture("Captura detenida")}
+                >
+                  Detener captura experimental
+                </button>
+              ) : (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={startGameSession}
+                >
+                  Modo captura experimental
+                </button>
+              )}
+              <label className="fps-control">
+                <span>FPS</span>
+                <select
+                  value={captureFps}
+                  onChange={(event) => setCaptureFps(Number(event.target.value) as CaptureFps)}
+                >
+                  {fpsOptions.map((fps) => (
+                    <option key={fps} value={fps}>
+                      {fps} FPS
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={detectConfiguredWindow}
+              >
+                Detectar ventana
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={captureDetectedWindowFrame}
+              >
+                Capturar frame de prueba
+              </button>
+            </>
+          ) : null}
           <button
             className="secondary-button"
             type="button"
             onClick={() => setIsEmulatorPanelOpen(true)}
           >
-            Emulador
+            {isInternalRuntime ? "Runtime" : "Emulador"}
           </button>
           <button
             className="secondary-button"
@@ -1252,11 +1270,22 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           <span className="save-status">{saveStatus}</span>
         </div>
       </header>
-      <section className="overlay-guidance" aria-label="Modo recomendado">
-        <strong>Modo recomendado</strong>
-        <span>ejecuta mGBA dentro del cuadro de juego, sin captura ni pérdida de rendimiento.</span>
-        <span>Haz click en el juego para controlar mGBA.</span>
-        <span>Haz click en los paneles para editar la run.</span>
+      <section className="overlay-guidance" aria-label="Modo de juego">
+        {isInternalRuntime ? (
+          <>
+            <strong>Modo interno Libretro</strong>
+            <span>El juego se renderiza dentro de la app usando tu core local.</span>
+            <span>Usa la preview debug para preparar, iniciar el loop y guardar SRAM.</span>
+            <span>Haz click en la tarjeta del runtime para activar teclado local.</span>
+          </>
+        ) : (
+          <>
+            <strong>Modo recomendado</strong>
+            <span>ejecuta mGBA dentro del cuadro de juego, sin captura ni pérdida de rendimiento.</span>
+            <span>Haz click en el juego para controlar mGBA.</span>
+            <span>Haz click en los paneles para editar la run.</span>
+          </>
+        )}
       </section>
 
       {isInternalRuntime ? (
@@ -1270,8 +1299,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
         <GameplayFrame
           gameName={runState.gameName}
           routeName={runState.currentRoute.name}
-          capturedFrame={capturedFrame}
-          liveFrame={liveFrame}
+          capturedFrame={isLegacyRuntime ? capturedFrame : null}
+          liveFrame={isLegacyRuntime ? liveFrame : null}
           internalFrameSnapshot={
             isInternalRuntime ? internalFrameSnapshot : null
           }
@@ -1307,16 +1336,16 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
             <span>Overlay: {overlayStatus}</span>
           </>
         )}
-        {isCaptureSessionRunning ? (
+        {isLegacyRuntime && isCaptureSessionRunning ? (
           <strong>{frameStatus || `Modo captura experimental a ${captureFps} FPS`}</strong>
         ) : null}
-        {captureSession?.isActive && captureSession.effectiveFps > 0 ? (
+        {isLegacyRuntime && captureSession?.isActive && captureSession.effectiveFps > 0 ? (
           <strong>{`${Math.round(captureSession.effectiveFps)} FPS reales`}</strong>
         ) : null}
-        {runState.captureWindow?.title ? (
+        {isLegacyRuntime && runState.captureWindow?.title ? (
           <strong>{runState.captureWindow.title}</strong>
         ) : null}
-        {frameStatus ? <strong>{frameStatus}</strong> : null}
+        {isLegacyRuntime && frameStatus ? <strong>{frameStatus}</strong> : null}
         {sessionStatus ? <strong>{sessionStatus}</strong> : null}
       </div>
 

@@ -330,6 +330,17 @@ The internal Libretro debug path can now render into the main `GameplayFrame`:
 
 This keeps the legacy external emulator and capture behavior intact. The internal path still moves full RGBA buffers through explicit invokes and React state, so it is not the final streaming or optimized renderer.
 
+### Mode-Aware Runtime UI
+
+The play screen now separates legacy external emulator controls from internal Libretro controls.
+
+- `legacy-external` keeps the existing mGBA window, docking, overlay, capture, FPS, detection, and test-frame controls.
+- `internal-libretro` hides those legacy-only controls and keeps runtime configuration, team editing, reset, and new-run actions visible.
+- The guidance banner explains whether the run is using external mGBA or the internal Libretro debug path.
+- `GameplayFrame` receives legacy capture frames only in legacy mode and internal snapshots only in internal mode, which prevents stale capture frames from appearing after a runtime switch.
+
+This is a frontend UX cleanup only. It does not change the Rust host, add commands, implement audio, or make `internal_runtime_start` the final gameplay loop.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:
