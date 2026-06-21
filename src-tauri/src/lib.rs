@@ -134,12 +134,35 @@ fn select_emulator_executable() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+fn select_libretro_core_file() -> Result<Option<String>, String> {
+    let selected_path = rfd::FileDialog::new()
+        .set_title("Seleccionar core Libretro")
+        .add_filter("Libretro core", &["dll", "so", "dylib"])
+        .add_filter("Archivos", &["*"])
+        .pick_file();
+
+    Ok(selected_path.map(|path| path.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
 fn select_rom_file() -> Result<Option<String>, String> {
     let selected_path = rfd::FileDialog::new()
         .set_title("Seleccionar ROM")
-        .add_filter("ROM GBA", &["gba"])
+        .add_filter(
+            "ROM Game Boy / Game Boy Color / Game Boy Advance",
+            &["gb", "gbc", "gba"],
+        )
         .add_filter("Archivos", &["*"])
         .pick_file();
+
+    Ok(selected_path.map(|path| path.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
+fn select_save_directory() -> Result<Option<String>, String> {
+    let selected_path = rfd::FileDialog::new()
+        .set_title("Seleccionar directorio de guardado")
+        .pick_folder();
 
     Ok(selected_path.map(|path| path.to_string_lossy().to_string()))
 }
@@ -1498,7 +1521,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             select_emulator_executable,
+            select_libretro_core_file,
             select_rom_file,
+            select_save_directory,
             launch_emulator,
             detect_emulator_window,
             find_mgba_windows,

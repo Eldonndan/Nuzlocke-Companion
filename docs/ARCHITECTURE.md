@@ -333,6 +333,12 @@ Legacy external mode keeps the existing mGBA executable, ROM path, and launch ar
 
 The selected configuration is stored in `RunState.runtimeConfig`. Deprecated `RunState.emulatorConfig` remains only for old local-save compatibility. The internal mode UI is still a debug flow and does not implement final start/pause/resume, audio, autosave, or packaged emulator assets.
 
+### Internal Runtime Default and Local Pickers
+
+New runs now default to `internal-libretro` with the mGBA Libretro target selected and empty local paths for the user-provided core and ROM. `legacy-external` remains available as a fallback and old runs that only contain deprecated `emulatorConfig` are still interpreted as legacy external runs.
+
+The setup and runtime configuration UI includes local file/folder pickers for the Libretro core, GB/GBC/GBA ROM, and optional save directory. These pickers only record local paths chosen by the user; the app does not download, copy, bundle, or redistribute cores, ROMs, or BIOS files.
+
 ### Internal Runtime Main GameplayFrame Rendering
 
 The internal Libretro debug path can now render into the main `GameplayFrame`:

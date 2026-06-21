@@ -77,7 +77,7 @@ export function getRunRuntimeConfig(run: RunState): RuntimeConfig {
     return normalizeLegacyExternalRuntimeConfig(run.emulatorConfig);
   }
 
-  return createDefaultLegacyExternalRuntimeConfig();
+  return createDefaultInternalLibretroRuntimeConfig();
 }
 
 export function withRunRuntimeConfig(

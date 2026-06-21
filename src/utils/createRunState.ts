@@ -9,6 +9,7 @@ import type {
   RuntimeConfig,
 } from "../shared/types";
 import {
+  createDefaultInternalLibretroRuntimeConfig,
   normalizeInternalLibretroRuntimeConfig,
   normalizeLegacyExternalRuntimeConfig,
 } from "./runtimeConfig";
@@ -41,11 +42,7 @@ export function createRunState(values: CreateRunValues): RunState {
       ? values.runtimeConfig.mode === "legacy-external"
         ? normalizeLegacyExternalRuntimeConfig(values.runtimeConfig)
         : normalizeInternalLibretroRuntimeConfig(values.runtimeConfig)
-      : normalizeLegacyExternalRuntimeConfig({
-          executablePath: values.emulatorPath ?? "",
-          romPath: values.romPath ?? "",
-          launchArgs: values.launchArgs ?? [],
-        }),
+      : createDefaultInternalLibretroRuntimeConfig(),
     lives: values.lives,
     levelCap: values.levelCap,
     currentRoute: {

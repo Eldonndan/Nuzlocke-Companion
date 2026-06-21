@@ -12,11 +12,15 @@ import {
   normalizeLegacyExternalRuntimeConfig,
 } from "../../utils/runtimeConfig";
 
+type PathPicker = () => Promise<string | null> | string | null;
+
 type EmulatorConfigPanelProps = {
   config: RuntimeConfig;
   onChange: (config: RuntimeConfig) => void;
-  onSelectEmulator: () => void;
-  onSelectRom: () => void;
+  onSelectEmulator: PathPicker;
+  onSelectRom: PathPicker;
+  onSelectCore?: PathPicker;
+  onSelectSaveDirectory?: PathPicker;
   onClose?: () => void;
 };
 
@@ -47,6 +51,8 @@ export function EmulatorConfigPanel({
   onChange,
   onSelectEmulator,
   onSelectRom,
+  onSelectCore,
+  onSelectSaveDirectory,
   onClose,
 }: EmulatorConfigPanelProps) {
   const isLegacyMode = isLegacyExternalRuntime(config);
@@ -78,6 +84,21 @@ export function EmulatorConfigPanel({
         .map((arg) => arg.trim())
         .filter(Boolean),
     });
+  };
+
+  const applyPickedPath = async (
+    picker: PathPicker | undefined,
+    applyPath: (selectedPath: string) => void,
+  ) => {
+    if (!picker) {
+      return;
+    }
+
+    const selectedPath = await picker();
+
+    if (selectedPath) {
+      applyPath(selectedPath);
+    }
   };
 
   return (
@@ -114,9 +135,14 @@ export function EmulatorConfigPanel({
             );
           }}
         >
-          <option value="legacy-external">Emulador externo legacy</option>
           <option value="internal-libretro">Runtime interno Libretro</option>
+          <option value="legacy-external">Emulador externo legacy</option>
         </select>
+        <small>
+          {isInternalMode
+            ? "Modo principal recomendado. Usa un core Libretro local y una ROM propia."
+            : "Modo antiguo/fallback para ejecutar mGBA externo."}
+        </small>
       </label>
 
       {isLegacyMode ? (
@@ -138,7 +164,14 @@ export function EmulatorConfigPanel({
               <button
                 className="secondary-button"
                 type="button"
-                onClick={onSelectEmulator}
+                onClick={() =>
+                  void applyPickedPath(onSelectEmulator, (executablePath) =>
+                    updateLegacyConfig({
+                      ...legacyConfig,
+                      executablePath,
+                    }),
+                  )
+                }
               >
                 Buscar
               </button>
@@ -167,7 +200,14 @@ export function EmulatorConfigPanel({
               <button
                 className="secondary-button"
                 type="button"
-                onClick={onSelectRom}
+                onClick={() =>
+                  void applyPickedPath(onSelectRom, (romPath) =>
+                    updateLegacyConfig({
+                      ...legacyConfig,
+                      romPath,
+                    }),
+                  )
+                }
               >
                 Buscar
               </button>
@@ -194,8 +234,8 @@ export function EmulatorConfigPanel({
       {isInternalMode ? (
         <>
           <p className="emulator-panel__help">
-            Modo debug interno. Selecciona un core Libretro local, por ejemplo
-            mGBA, y usa una ROM propia. No incluyas ROMs ni cores en el repo.
+            Selecciona un core Libretro local, por ejemplo mgba_libretro.dll.
+            La app no incluye cores, ROMs ni BIOS.
           </p>
 
           <label className="form-field">
@@ -215,17 +255,33 @@ export function EmulatorConfigPanel({
 
           <label className="form-field">
             <span>Ruta del core</span>
-            <input
-              type="text"
-              value={internalConfig.corePath}
-              onChange={(event) =>
-                updateInternalConfig({
-                  ...internalConfig,
-                  corePath: event.target.value,
-                })
-              }
-              placeholder="C:\\Libretro\\mgba_libretro.dll"
-            />
+            <div className="path-field">
+              <input
+                type="text"
+                value={internalConfig.corePath}
+                onChange={(event) =>
+                  updateInternalConfig({
+                    ...internalConfig,
+                    corePath: event.target.value,
+                  })
+                }
+                placeholder="C:\\Libretro\\mgba_libretro.dll"
+              />
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() =>
+                  void applyPickedPath(onSelectCore, (corePath) =>
+                    updateInternalConfig({
+                      ...internalConfig,
+                      corePath,
+                    }),
+                  )
+                }
+              >
+                Buscar
+              </button>
+            </div>
             <small>
               Ruta local al core Libretro. No se descarga ni valida desde este
               panel.
@@ -234,33 +290,65 @@ export function EmulatorConfigPanel({
 
           <label className="form-field">
             <span>Ruta de la ROM</span>
-            <input
-              type="text"
-              value={internalConfig.romPath}
-              onChange={(event) =>
-                updateInternalConfig({
-                  ...internalConfig,
-                  romPath: event.target.value,
-                })
-              }
-              placeholder="C:\\Juegos\\pokemon.gba"
-            />
+            <div className="path-field">
+              <input
+                type="text"
+                value={internalConfig.romPath}
+                onChange={(event) =>
+                  updateInternalConfig({
+                    ...internalConfig,
+                    romPath: event.target.value,
+                  })
+                }
+                placeholder="C:\\Juegos\\pokemon.gba"
+              />
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() =>
+                  void applyPickedPath(onSelectRom, (romPath) =>
+                    updateInternalConfig({
+                      ...internalConfig,
+                      romPath,
+                    }),
+                  )
+                }
+              >
+                Buscar
+              </button>
+            </div>
             <small>Ruta a una ROM propia del usuario.</small>
           </label>
 
           <label className="form-field">
             <span>Directorio de guardado opcional</span>
-            <input
-              type="text"
-              value={internalConfig.saveDirectory ?? ""}
-              onChange={(event) =>
-                updateInternalConfig({
-                  ...internalConfig,
-                  saveDirectory: event.target.value || undefined,
-                })
-              }
-              placeholder="C:\\Juegos\\saves"
-            />
+            <div className="path-field">
+              <input
+                type="text"
+                value={internalConfig.saveDirectory ?? ""}
+                onChange={(event) =>
+                  updateInternalConfig({
+                    ...internalConfig,
+                    saveDirectory: event.target.value || undefined,
+                  })
+                }
+                placeholder="C:\\Juegos\\saves"
+              />
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() =>
+                  void applyPickedPath(onSelectSaveDirectory, (saveDirectory) =>
+                    updateInternalConfig({
+                      ...internalConfig,
+                      saveDirectory,
+                    }),
+                  )
+                }
+              >
+                Buscar
+              </button>
+            </div>
             <small>
               Si queda vacio, el runtime usara el directorio de la ROM cuando
               corresponda.

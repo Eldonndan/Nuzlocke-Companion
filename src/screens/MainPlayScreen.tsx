@@ -38,7 +38,9 @@ import {
   positionEmulatorWindow,
   positionOverlayWindow,
   selectEmulatorExecutable,
+  selectLibretroCoreFile,
   selectRomFile,
+  selectSaveDirectory,
   setOverlayClickThrough,
   showOverlay,
   showMainWindow,
@@ -984,38 +986,38 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const chooseEmulator = async () => {
-    if (!ensureLegacyExternalRuntime()) {
-      return;
-    }
-
     try {
-      const selectedPath = await selectEmulatorExecutable();
-      if (selectedPath) {
-        updateRuntimeConfig({
-          ...emulatorConfig,
-          executablePath: selectedPath,
-        });
-      }
+      return await selectEmulatorExecutable();
     } catch {
       setSessionStatus("No se pudo abrir el selector del emulador.");
+      return null;
     }
   };
 
   const chooseRom = async () => {
-    if (!ensureLegacyExternalRuntime()) {
-      return;
-    }
-
     try {
-      const selectedPath = await selectRomFile();
-      if (selectedPath) {
-        updateRuntimeConfig({
-          ...emulatorConfig,
-          romPath: selectedPath,
-        });
-      }
+      return await selectRomFile();
     } catch {
       setSessionStatus("No se pudo abrir el selector de ROM.");
+      return null;
+    }
+  };
+
+  const chooseLibretroCore = async () => {
+    try {
+      return await selectLibretroCoreFile();
+    } catch {
+      setSessionStatus("No se pudo abrir el selector del core Libretro.");
+      return null;
+    }
+  };
+
+  const chooseSaveDirectory = async () => {
+    try {
+      return await selectSaveDirectory();
+    } catch {
+      setSessionStatus("No se pudo abrir el selector del directorio de guardado.");
+      return null;
     }
   };
 
@@ -1464,6 +1466,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           onClose={() => setIsEmulatorPanelOpen(false)}
           onSelectEmulator={chooseEmulator}
           onSelectRom={chooseRom}
+          onSelectCore={chooseLibretroCore}
+          onSelectSaveDirectory={chooseSaveDirectory}
         />
       ) : null}
 
