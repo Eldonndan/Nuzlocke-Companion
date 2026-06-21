@@ -8,12 +8,14 @@ pub fn save_file_path(
     kind: InternalSaveMemoryKind,
 ) -> Result<PathBuf, String> {
     let rom_path = Path::new(rom_path);
-    let base_directory = match save_directory.map(str::trim).filter(|path| !path.is_empty()) {
+    let base_directory = match save_directory
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+    {
         Some(save_directory) => PathBuf::from(save_directory),
-        None => rom_path
-            .parent()
-            .map(Path::to_path_buf)
-            .ok_or_else(|| "ROM path does not have a parent directory for save files.".to_string())?,
+        None => rom_path.parent().map(Path::to_path_buf).ok_or_else(|| {
+            "ROM path does not have a parent directory for save files.".to_string()
+        })?,
     };
 
     let file_stem = rom_path
@@ -22,10 +24,7 @@ pub fn save_file_path(
         .filter(|stem| !stem.trim().is_empty())
         .ok_or_else(|| "ROM path does not have a valid file name for save files.".to_string())?;
 
-    Ok(base_directory.join(format!(
-        "{file_stem}.{}",
-        save_memory_extension(kind)
-    )))
+    Ok(base_directory.join(format!("{file_stem}.{}", save_memory_extension(kind))))
 }
 
 pub fn ensure_save_directory(path: &Path) -> Result<(), String> {

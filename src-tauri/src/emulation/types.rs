@@ -34,6 +34,7 @@ pub struct InternalRuntimeStatus {
     pub latest_frame: Option<InternalFrameInfo>,
     pub stepped_frames: u64,
     pub frame_loop: Option<InternalFrameLoopInfo>,
+    pub session_info: Option<InternalRuntimeSessionInfo>,
     pub input_info: InternalInputInfo,
     pub audio_info: InternalAudioInfo,
     pub av_info: Option<InternalSystemAvInfo>,
@@ -60,6 +61,7 @@ impl Default for InternalRuntimeStatus {
             latest_frame: None,
             stepped_frames: 0,
             frame_loop: None,
+            session_info: None,
             input_info: InternalInputInfo::default(),
             audio_info: InternalAudioInfo::default(),
             av_info: None,
@@ -185,6 +187,16 @@ pub struct InternalFrameLoopInfo {
     pub cancel_requested: bool,
     pub target_fps: Option<u32>,
     pub max_frames: Option<u32>,
+    pub frames_run: u64,
+    pub last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalRuntimeSessionInfo {
+    pub is_active: bool,
+    pub is_paused: bool,
+    pub target_fps: f64,
     pub frames_run: u64,
     pub last_error: Option<String>,
 }

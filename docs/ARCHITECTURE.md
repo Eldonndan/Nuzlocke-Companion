@@ -397,6 +397,14 @@ The internal runtime controller remains mounted inside the side panel even when 
 
 Frame snapshots now have a base64 command path in addition to the original RGBA array command. The frontend uses the base64 snapshot for internal gameplay rendering to avoid storing large `number[]` RGBA buffers in React state. This is still explicit invoke-based frame transport, not streaming, shared memory, WebGL, or the final renderer. Audio remains a debug Web Audio path.
 
+### Internal Native-Paced Session and Binary Frame Transport
+
+The internal Libretro runtime now has a native-paced session path. Rust owns the continuous `retro_run()` loop on a background thread, uses `retro_get_system_av_info` timing to pick the target FPS, and exposes real `start`, `pause`, `resume`, and `stop` commands. The frontend no longer needs to drive gameplay by repeatedly invoking bounded frame batches.
+
+The main gameplay renderer uses a two-step frame IPC path: JSON metadata via `internal_runtime_get_latest_frame_info`, then raw RGBA bytes via `tauri::ipc::Response` from `internal_runtime_get_latest_frame_rgba_bytes`. React keeps only frame metadata in state and paints the bytes directly into the `GameplayFrame` canvas from a `requestAnimationFrame` controller.
+
+The older base64 snapshot and bounded batch commands remain available for debug/fallback workflows. This is still not WebGL, shared memory, a custom protocol, or the final GPU renderer, but it avoids base64/JSON payloads for the main gameplay frame.
+
 ### Internal Frame Aspect-Ratio Fitting
 
 Internal gameplay frames use the snapshot's native dimensions as the canvas backing store, for example GBA `240x160` with a `3:2` aspect ratio. `GameplayFrame` observes the available screen area with `ResizeObserver`, computes the largest visual size that fits without changing aspect ratio, and applies that CSS size to the internal canvas.

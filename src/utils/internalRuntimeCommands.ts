@@ -120,6 +120,14 @@ export type InternalFrameLoopInfo = {
   lastError?: string | null;
 };
 
+export type InternalRuntimeSessionInfo = {
+  isActive: boolean;
+  isPaused: boolean;
+  targetFps: number;
+  framesRun: number;
+  lastError?: string | null;
+};
+
 export type InternalAudioInfo = {
   sampleRate: number;
   bufferedFrames: number;
@@ -157,6 +165,7 @@ export type InternalRuntimeStatus = {
   latestFrame?: InternalFrameInfo | null;
   steppedFrames: number;
   frameLoop?: InternalFrameLoopInfo | null;
+  sessionInfo?: InternalRuntimeSessionInfo | null;
   inputInfo: InternalInputInfo;
   audioInfo: InternalAudioInfo;
   avInfo?: InternalSystemAvInfo | null;
@@ -190,6 +199,14 @@ export function getLatestInternalRuntimeFrameSnapshotBase64() {
   return invoke<InternalFrameSnapshotBase64>(
     "internal_runtime_get_latest_frame_snapshot_base64",
   );
+}
+
+export function getLatestInternalRuntimeFrameInfo() {
+  return invoke<InternalFrameInfo>("internal_runtime_get_latest_frame_info");
+}
+
+export function getLatestInternalRuntimeFrameRgbaBytes() {
+  return invoke<ArrayBuffer>("internal_runtime_get_latest_frame_rgba_bytes");
 }
 
 export function drainInternalRuntimeAudioChunk(maxFrames = 4096) {

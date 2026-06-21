@@ -106,7 +106,8 @@ Status:
 - Added a collapsible internal debug panel and frontend audio backlog controls for more comfortable real-play smoke tests.
 - Added an internal playable shell with side-panel tabs, base64 frame snapshots, and frontend performance presets.
 - Corrected internal frame aspect-ratio fitting so GB/GBC/GBA frames are centered without stretching.
-- Final continuous gameplay loop, efficient frame transport, physical input, real audio pipelines, and save states remain out of this spike.
+- Added a native-paced internal session loop in Rust with start/pause/resume/stop and binary RGBA frame transport for the main gameplay canvas.
+- Physical input, production audio pipelines, GPU/shared-memory rendering, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline
 

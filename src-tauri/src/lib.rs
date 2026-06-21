@@ -1,17 +1,17 @@
 mod emulation;
 
 use emulation::commands::{
-    internal_runtime_cancel_frame_loop, internal_runtime_clear_joypad_buttons,
-    internal_runtime_clear_audio_buffer, internal_runtime_deinit_core,
-    internal_runtime_drain_audio_chunk, internal_runtime_get_status,
-    internal_runtime_get_latest_frame_snapshot, internal_runtime_get_latest_frame_snapshot_base64,
+    internal_runtime_cancel_frame_loop, internal_runtime_clear_audio_buffer,
+    internal_runtime_clear_joypad_buttons, internal_runtime_deinit_core,
+    internal_runtime_drain_audio_chunk, internal_runtime_get_latest_frame_info,
+    internal_runtime_get_latest_frame_rgba_bytes, internal_runtime_get_latest_frame_snapshot,
+    internal_runtime_get_latest_frame_snapshot_base64, internal_runtime_get_status,
     internal_runtime_init_core, internal_runtime_load_core, internal_runtime_load_game,
-    internal_runtime_pause, internal_runtime_prepare, internal_runtime_reset,
-    internal_runtime_resume, internal_runtime_refresh_save_memory_info,
-    internal_runtime_run_frame_loop,
+    internal_runtime_load_save_memory_from_disk, internal_runtime_pause, internal_runtime_prepare,
+    internal_runtime_refresh_save_memory_info, internal_runtime_reset, internal_runtime_resume,
+    internal_runtime_run_frame_loop, internal_runtime_save_memory_to_disk,
     internal_runtime_set_joypad_button, internal_runtime_start, internal_runtime_step_frame,
     internal_runtime_stop, internal_runtime_unload_game,
-    internal_runtime_load_save_memory_from_disk, internal_runtime_save_memory_to_disk,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -289,7 +289,9 @@ fn stop_capture_session(
         effective_fps: 0.0,
         frames_captured: 0,
         last_frame_at: None,
-        last_error: Some("La captura en tiempo real solo está disponible en Windows por ahora.".into()),
+        last_error: Some(
+            "La captura en tiempo real solo está disponible en Windows por ahora.".into(),
+        ),
     })
 }
 
@@ -314,7 +316,9 @@ fn get_capture_status(
         effective_fps: 0.0,
         frames_captured: 0,
         last_frame_at: None,
-        last_error: Some("La captura en tiempo real solo está disponible en Windows por ahora.".into()),
+        last_error: Some(
+            "La captura en tiempo real solo está disponible en Windows por ahora.".into(),
+        ),
     })
 }
 
@@ -369,7 +373,10 @@ fn position_overlay_window(
         .set_position(tauri::PhysicalPosition::new(x, y))
         .map_err(|error| format!("No se pudo mover el overlay: {error}"))?;
     overlay
-        .set_size(tauri::PhysicalSize::new(width.max(320) as u32, height.max(240) as u32))
+        .set_size(tauri::PhysicalSize::new(
+            width.max(320) as u32,
+            height.max(240) as u32,
+        ))
         .map_err(|error| format!("No se pudo ajustar el tamaño del overlay: {error}"))?;
     Ok(())
 }
@@ -544,9 +551,8 @@ mod windows_window_detection {
     use super::CaptureWindow;
     use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW,
-        GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible, GWL_EXSTYLE,
-        WS_EX_TOOLWINDOW,
+        EnumWindows, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
+        GetWindowThreadProcessId, IsIconic, IsWindowVisible, GWL_EXSTYLE, WS_EX_TOOLWINDOW,
     };
 
     struct DetectionContext {
@@ -713,12 +719,10 @@ mod windows_window_capture {
     use windows_sys::Win32::Foundation::{HWND, RECT};
     use windows_sys::Win32::Graphics::Gdi::{
         BitBlt, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetWindowDC,
-        ReleaseDC,
-        SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, RGBQUAD, SRCCOPY,
+        ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, RGBQUAD,
+        SRCCOPY,
     };
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetWindowRect, IsIconic, IsWindowVisible,
-    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsIconic, IsWindowVisible};
 
     pub fn capture_window_frame(window_id: &str) -> Result<CapturedFrame, String> {
         let hwnd = parse_hwnd(window_id)?;
@@ -867,8 +871,7 @@ mod windows_window_capture {
 mod windows_overlay_window {
     use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        BringWindowToTop, SetForegroundWindow, SetWindowPos, ShowWindow, SW_RESTORE,
-        SWP_NOZORDER,
+        BringWindowToTop, SetForegroundWindow, SetWindowPos, ShowWindow, SWP_NOZORDER, SW_RESTORE,
     };
 
     pub fn position_emulator_window(
@@ -936,10 +939,10 @@ mod windows_docked_window {
     };
     use windows_sys::Win32::Foundation::{HWND, RECT};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetParent, GetWindowLongPtrW, GetWindowRect, SetParent, SetWindowLongPtrW,
-        SetWindowPos, ShowWindow, GWL_EXSTYLE, GWL_STYLE, SW_RESTORE, SWP_FRAMECHANGED,
-        SWP_NOACTIVATE, SWP_NOZORDER, WS_CAPTION, WS_CHILD, WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
-        WS_POPUP, WS_SYSMENU, WS_THICKFRAME, WS_VISIBLE,
+        GetParent, GetWindowLongPtrW, GetWindowRect, SetParent, SetWindowLongPtrW, SetWindowPos,
+        ShowWindow, GWL_EXSTYLE, GWL_STYLE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER,
+        SW_RESTORE, WS_CAPTION, WS_CHILD, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU,
+        WS_THICKFRAME, WS_VISIBLE,
     };
 
     pub fn dock_emulator_window(
@@ -1109,7 +1112,10 @@ mod windows_docked_window {
         height: i32,
     }
 
-    fn rect_for_parent_client(parent_hwnd: HWND, host_rect: &HostRect) -> Result<ClientRect, String> {
+    fn rect_for_parent_client(
+        parent_hwnd: HWND,
+        host_rect: &HostRect,
+    ) -> Result<ClientRect, String> {
         let width = host_rect.width.max(160);
         let height = host_rect.height.max(120);
 
@@ -1324,7 +1330,10 @@ mod wgc_capture_session {
         }
 
         let frame_interval = Duration::from_millis((1000 / fps) as u64);
-        let metrics = Arc::new(Mutex::new(CaptureSessionMetrics::new(window_id.clone(), fps)));
+        let metrics = Arc::new(Mutex::new(CaptureSessionMetrics::new(
+            window_id.clone(),
+            fps,
+        )));
         let flags = CaptureSessionFlags {
             app_handle,
             metrics: metrics.clone(),
@@ -1545,6 +1554,8 @@ pub fn run() {
             undock_emulator_window,
             resize_docked_emulator,
             internal_runtime_get_status,
+            internal_runtime_get_latest_frame_info,
+            internal_runtime_get_latest_frame_rgba_bytes,
             internal_runtime_get_latest_frame_snapshot,
             internal_runtime_get_latest_frame_snapshot_base64,
             internal_runtime_drain_audio_chunk,

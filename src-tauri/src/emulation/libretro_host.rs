@@ -219,7 +219,8 @@ impl LibretroHost {
             InternalSaveMemoryKind::SaveRam => "Autosave SRAM escrito en disco.",
             InternalSaveMemoryKind::Rtc => "Autosave RTC escrito en disco.",
         };
-        self.save_memory_to_disk_with_message(kind, message).map(Some)
+        self.save_memory_to_disk_with_message(kind, message)
+            .map(Some)
     }
 
     fn save_memory_to_disk_with_message(
@@ -235,8 +236,8 @@ impl LibretroHost {
         // SAFETY: The core returned a non-null pointer and non-zero size for this
         // memory kind. We copy the bytes immediately into an owned Vec and never
         // store the core pointer.
-        let bytes = unsafe { std::slice::from_raw_parts(data_pointer as *const u8, size_bytes) }
-            .to_vec();
+        let bytes =
+            unsafe { std::slice::from_raw_parts(data_pointer as *const u8, size_bytes) }.to_vec();
         fs::write(&file_path, bytes)
             .map_err(|error| format!("Unable to write save memory file: {error}"))?;
 
@@ -348,11 +349,7 @@ impl LibretroHost {
             .loaded_game
             .as_ref()
             .ok_or_else(|| "A ROM must be loaded before resolving save path.".to_string())?;
-        save_file_path(
-            self.save_directory.as_deref(),
-            &loaded_game.rom_path,
-            kind,
-        )
+        save_file_path(self.save_directory.as_deref(), &loaded_game.rom_path, kind)
     }
 }
 

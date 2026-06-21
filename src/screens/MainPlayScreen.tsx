@@ -1,6 +1,7 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { EmulatorConfigPanel } from "../components/emulator/EmulatorConfigPanel";
+import { InternalRuntimeDisplayController } from "../components/emulator/InternalRuntimeDisplayController";
 import { InternalRuntimeFramePreview } from "../components/emulator/InternalRuntimeFramePreview";
 import { QuickEditPanel } from "../components/edit/QuickEditPanel";
 import { GameplayFrame } from "../components/layout/GameplayFrame";
@@ -59,7 +60,11 @@ import {
   loadSavedRun,
   saveRun,
 } from "../utils/runStorage";
-import type { InternalFrameSnapshotBase64 } from "../utils/internalRuntimeCommands";
+import type {
+  InternalFrameInfo,
+  InternalFrameSnapshotBase64,
+  InternalRuntimeStatus,
+} from "../utils/internalRuntimeCommands";
 import { stopInternalRuntime } from "../utils/internalRuntimeCommands";
 import {
   createDefaultLegacyExternalRuntimeConfig,
@@ -172,6 +177,12 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const [liveFrame, setLiveFrame] = useState<LiveCaptureFrame | null>(null);
   const [internalFrameSnapshotBase64, setInternalFrameSnapshotBase64] =
     useState<InternalFrameSnapshotBase64 | null>(null);
+  const [internalFrameInfo, setInternalFrameInfo] =
+    useState<InternalFrameInfo | null>(null);
+  const [internalRuntimeStatus, setInternalRuntimeStatus] =
+    useState<InternalRuntimeStatus | null>(null);
+  const [internalCanvas, setInternalCanvas] =
+    useState<HTMLCanvasElement | null>(null);
   const [isInternalDebugLoopRunning, setIsInternalDebugLoopRunning] =
     useState(false);
   const [isInternalDebugPanelCollapsed, setIsInternalDebugPanelCollapsed] =
@@ -210,7 +221,12 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     runtimeConfig.corePath && runtimeConfig.romPath,
   );
   const disableInternalDestructiveActions =
-    isInternalRuntime && isInternalDebugLoopRunning;
+    isInternalRuntime &&
+    (isInternalDebugLoopRunning ||
+      Boolean(internalRuntimeStatus?.sessionInfo?.isActive));
+  const isInternalNativeSessionActive = Boolean(
+    internalRuntimeStatus?.sessionInfo?.isActive,
+  );
 
   const ensureLegacyExternalRuntime = () => {
     if (isLegacyRuntime) {
@@ -223,8 +239,11 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const ensureInternalDebugLoopStopped = (actionLabel: string) => {
-    if (isInternalRuntime && isInternalDebugLoopRunning) {
-      setSessionStatus(`Detén el loop debug antes de ${actionLabel}.`);
+    if (
+      isInternalRuntime &&
+      (isInternalDebugLoopRunning || isInternalNativeSessionActive)
+    ) {
+      setSessionStatus(`Deten la sesion interna antes de ${actionLabel}.`);
       return false;
     }
 
@@ -425,6 +444,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     setIsCaptureSessionRunning(false);
     setDockedWindow(null);
     setInternalFrameSnapshotBase64(null);
+    setInternalFrameInfo(null);
+    setInternalRuntimeStatus(null);
     setRunState((currentRun) => ({
       ...withRunRuntimeConfig(currentRun, config),
       captureWindow: undefined,
@@ -1055,6 +1076,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     setCapturedFrame(null);
     setLiveFrame(null);
     setInternalFrameSnapshotBase64(null);
+    setInternalFrameInfo(null);
+    setInternalRuntimeStatus(null);
     setRunState(cloneRunState(run));
     setSaveStatus("Guardado local");
     setWindowStatus("Ventana de juego sin detectar");
@@ -1074,6 +1097,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     void hideOverlay();
     void undockCurrentGame();
     setInternalFrameSnapshotBase64(null);
+    setInternalFrameInfo(null);
     onExit();
   };
 
@@ -1157,6 +1181,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
 
     if (!isInternalRuntime) {
       setInternalFrameSnapshotBase64(null);
+      setInternalFrameInfo(null);
+      setInternalRuntimeStatus(null);
       setIsInternalDebugLoopRunning(false);
       setIsInternalDebugPanelCollapsed(false);
     }
@@ -1389,7 +1415,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
             capturedFrame={null}
             liveFrame={null}
             internalFrameSnapshotBase64={internalFrameSnapshotBase64}
+            internalFrameInfo={internalFrameInfo}
             isInternalRuntime
+            usesExternalInternalRenderer
+            onInternalCanvasReady={setInternalCanvas}
             captureStatus={frameStatus}
             isCapturing={false}
             screenRef={gameplayScreenRef}
@@ -1442,6 +1471,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
               <InternalRuntimeFramePreview
                 runtimeConfig={runtimeConfig}
                 onFrameSnapshotBase64={setInternalFrameSnapshotBase64}
+                onRuntimeStatusChange={setInternalRuntimeStatus}
                 onDebugLoopRunningChange={setIsInternalDebugLoopRunning}
                 onDebugPanelCollapsedChange={setIsInternalDebugPanelCollapsed}
                 isCollapsed={internalPlayTab !== "debug"}
@@ -1449,6 +1479,12 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
                 keyboardTargetRef={gameplayScreenRef}
               />
             }
+          />
+          <InternalRuntimeDisplayController
+            canvas={internalCanvas}
+            isEnabled={isInternalRuntime && isInternalNativeSessionActive}
+            onFrameInfo={setInternalFrameInfo}
+            onRenderStatus={setFrameStatus}
           />
         </section>
       ) : (
@@ -1482,6 +1518,12 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
               <strong>
                 Sesion interna experimental activa: detenla antes de cambiar
                 runtime, resetear o salir.
+              </strong>
+            ) : null}
+            {isInternalNativeSessionActive ? (
+              <strong>
+                Sesion interna activa: detenla antes de cambiar runtime,
+                resetear o salir.
               </strong>
             ) : null}
           </>

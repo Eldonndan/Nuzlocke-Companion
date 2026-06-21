@@ -1,14 +1,12 @@
-use tauri::State;
+use tauri::{ipc::Response, State};
 
 use super::libretro_host::{LibretroHost, LibretroHostConfig};
 use super::state::InternalEmulationState;
 use super::types::{
-    InternalAudioChunk, InternalFrameSnapshot, InternalFrameSnapshotBase64, InternalRuntimeStatus,
-    InternalSaveMemoryKind, PrepareInternalRuntimeRequest, RunFrameLoopRequest,
-    SetJoypadButtonRequest,
+    InternalAudioChunk, InternalFrameInfo, InternalFrameSnapshot, InternalFrameSnapshotBase64,
+    InternalRuntimeStatus, InternalSaveMemoryKind, PrepareInternalRuntimeRequest,
+    RunFrameLoopRequest, SetJoypadButtonRequest,
 };
-
-const NOT_IMPLEMENTED: &str = "Internal Libretro runtime is not implemented yet.";
 
 #[tauri::command]
 pub fn internal_runtime_get_status(
@@ -29,6 +27,20 @@ pub fn internal_runtime_get_latest_frame_snapshot_base64(
     state: State<'_, InternalEmulationState>,
 ) -> Result<InternalFrameSnapshotBase64, String> {
     state.latest_frame_snapshot_base64()
+}
+
+#[tauri::command]
+pub fn internal_runtime_get_latest_frame_info(
+    state: State<'_, InternalEmulationState>,
+) -> Result<InternalFrameInfo, String> {
+    state.latest_frame_info()
+}
+
+#[tauri::command]
+pub fn internal_runtime_get_latest_frame_rgba_bytes(
+    state: State<'_, InternalEmulationState>,
+) -> Result<Response, String> {
+    state.latest_frame_rgba_bytes().map(Response::new)
 }
 
 #[tauri::command]
@@ -250,24 +262,39 @@ pub fn internal_runtime_load_save_memory_from_disk(
 pub fn internal_runtime_start(
     state: State<'_, InternalEmulationState>,
 ) -> Result<InternalRuntimeStatus, String> {
-    state.mark_error(NOT_IMPLEMENTED)?;
-    Err(NOT_IMPLEMENTED.into())
+    match state.start_session() {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            state.mark_error(&error)?;
+            Err(error)
+        }
+    }
 }
 
 #[tauri::command]
 pub fn internal_runtime_pause(
     state: State<'_, InternalEmulationState>,
 ) -> Result<InternalRuntimeStatus, String> {
-    state.mark_error(NOT_IMPLEMENTED)?;
-    Err(NOT_IMPLEMENTED.into())
+    match state.pause_session() {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            state.mark_error(&error)?;
+            Err(error)
+        }
+    }
 }
 
 #[tauri::command]
 pub fn internal_runtime_resume(
     state: State<'_, InternalEmulationState>,
 ) -> Result<InternalRuntimeStatus, String> {
-    state.mark_error(NOT_IMPLEMENTED)?;
-    Err(NOT_IMPLEMENTED.into())
+    match state.resume_session() {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            state.mark_error(&error)?;
+            Err(error)
+        }
+    }
 }
 
 #[tauri::command]

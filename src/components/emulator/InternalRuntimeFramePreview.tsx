@@ -21,6 +21,10 @@ import {
   refreshInternalRuntimeSaveMemoryInfo,
   runInternalRuntimeFrameLoop,
   saveInternalRuntimeMemoryToDisk,
+  pauseInternalRuntime,
+  resumeInternalRuntime,
+  startInternalRuntime,
+  stopInternalRuntime,
   stepInternalRuntimeFrame,
   clearInternalRuntimeJoypadButtons,
   setInternalRuntimeJoypadButton,
@@ -52,6 +56,7 @@ type InternalRuntimeFramePreviewProps = {
   onFrameSnapshot?: (snapshot: InternalFrameSnapshot | null) => void;
   onFrameSnapshotBase64?: (snapshot: InternalFrameSnapshotBase64 | null) => void;
   onDebugLoopRunningChange?: (isRunning: boolean) => void;
+  onRuntimeStatusChange?: (status: InternalRuntimeStatus) => void;
   onDebugPanelCollapsedChange?: (collapsed: boolean) => void;
   isCollapsed?: boolean;
   showCollapseToggle?: boolean;
@@ -158,6 +163,7 @@ export function InternalRuntimeFramePreview({
   onFrameSnapshot,
   onFrameSnapshotBase64,
   onDebugLoopRunningChange,
+  onRuntimeStatusChange,
   onDebugPanelCollapsedChange,
   isCollapsed,
   showCollapseToggle = true,
@@ -206,6 +212,10 @@ export function InternalRuntimeFramePreview({
   const disableLifecycleActions = isActionLoading || isDebugLoopRunning;
   const effectiveDebugPanelCollapsed = isCollapsed ?? isDebugPanelCollapsed;
   const activePerformancePreset = performancePresetConfig[performancePreset];
+  const isNativeSessionActive = Boolean(runtimeStatus?.sessionInfo?.isActive);
+  const isNativeSessionPaused = Boolean(runtimeStatus?.sessionInfo?.isPaused);
+  const disableRuntimeLifecycleActions =
+    disableLifecycleActions || isNativeSessionActive;
 
   const applyRuntimeStatus = (nextStatus: InternalRuntimeStatus) => {
     setRuntimeStatus(nextStatus);
@@ -213,6 +223,7 @@ export function InternalRuntimeFramePreview({
     setAudioInfo(nextStatus.audioInfo);
     setSaveMemory(nextStatus.saveMemory);
     setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
+    onRuntimeStatusChange?.(nextStatus);
   };
 
   const buildPrepareRequest = (): PrepareInternalRuntimeRequest | null => {
@@ -606,6 +617,38 @@ export function InternalRuntimeFramePreview({
     await drainAndEnqueueAudio();
   };
 
+  const startNativeSession = async () => {
+    await runRuntimeAction(
+      "Iniciando sesion interna...",
+      startInternalRuntime,
+      "Sesion interna activa.",
+    );
+  };
+
+  const pauseNativeSession = async () => {
+    await runRuntimeAction(
+      "Pausando sesion interna...",
+      pauseInternalRuntime,
+      "Sesion interna pausada.",
+    );
+  };
+
+  const resumeNativeSession = async () => {
+    await runRuntimeAction(
+      "Continuando sesion interna...",
+      resumeInternalRuntime,
+      "Sesion interna activa.",
+    );
+  };
+
+  const stopNativeSession = async () => {
+    await runRuntimeAction(
+      "Deteniendo sesion interna...",
+      stopInternalRuntime,
+      "Sesion interna detenida.",
+    );
+  };
+
   const startDebugRenderLoop = async () => {
     if (debugLoopRunningRef.current) {
       return;
@@ -939,7 +982,11 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void refreshSnapshot()}
-            disabled={isActionLoading || isDebugLoopRunning}
+            disabled={
+              isActionLoading ||
+              isDebugLoopRunning ||
+              (isNativeSessionActive && !isNativeSessionPaused)
+            }
           >
             Renderizar ultimo frame
           </button>
@@ -947,7 +994,11 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void stepAndRender()}
-            disabled={isActionLoading || isDebugLoopRunning}
+            disabled={
+              isActionLoading ||
+              isDebugLoopRunning ||
+              (isNativeSessionActive && !isNativeSessionPaused)
+            }
           >
             Avanzar fotograma y renderizar
           </button>
@@ -955,7 +1006,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void runBatchAndRender()}
-            disabled={isActionLoading || isDebugLoopRunning}
+            disabled={isActionLoading || isDebugLoopRunning || isNativeSessionActive}
           >
             60 fotogramas y renderizar
           </button>
@@ -966,11 +1017,22 @@ export function InternalRuntimeFramePreview({
 
       <div className="internal-frame-preview__compact-bar">
         <strong>
-          {isDebugLoopRunning
-            ? "Sesion interna activa"
-            : "Sesion interna detenida"}
+          {isNativeSessionActive
+            ? isNativeSessionPaused
+              ? "Sesion pausada"
+              : "Sesion activa"
+            : "Sesion detenida"}
         </strong>
-        <span>{`Frames: ${debugLoopFramesRendered}`}</span>
+        <span>{`Frames: ${
+          runtimeStatus?.sessionInfo?.framesRun ??
+          runtimeStatus?.steppedFrames ??
+          0
+        }`}</span>
+        <span>{`FPS core: ${
+          runtimeStatus?.sessionInfo?.targetFps ??
+          runtimeStatus?.avInfo?.fps ??
+          0
+        }`}</span>
         <span>{isAudioDebugEnabled ? "Audio activo" : "Audio apagado"}</span>
         <span>{`Buffer audio: ${audioInfo?.bufferedFrames ?? 0}`}</span>
         <label className="internal-frame-preview__preset">
@@ -980,7 +1042,7 @@ export function InternalRuntimeFramePreview({
             onChange={(event) =>
               setPerformancePreset(event.target.value as InternalPerformancePreset)
             }
-            disabled={isDebugLoopRunning}
+            disabled={isDebugLoopRunning || isNativeSessionActive}
           >
             {Object.entries(performancePresetConfig).map(([value, config]) => (
               <option key={value} value={value}>
@@ -992,16 +1054,32 @@ export function InternalRuntimeFramePreview({
         <button
           className="primary-button"
           type="button"
-          onClick={() => void startDebugRenderLoop()}
-          disabled={isActionLoading || isDebugLoopRunning}
+          onClick={() => void startNativeSession()}
+          disabled={isActionLoading || isNativeSessionActive}
         >
           Iniciar juego
         </button>
         <button
           className="secondary-button"
           type="button"
-          onClick={() => void stopDebugRenderLoop()}
-          disabled={!isDebugLoopRunning}
+          onClick={() => void pauseNativeSession()}
+          disabled={isActionLoading || !isNativeSessionActive || isNativeSessionPaused}
+        >
+          Pausar
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => void resumeNativeSession()}
+          disabled={isActionLoading || !isNativeSessionActive || !isNativeSessionPaused}
+        >
+          Continuar
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => void stopNativeSession()}
+          disabled={isActionLoading || !isNativeSessionActive}
         >
           Detener
         </button>
@@ -1020,7 +1098,7 @@ export function InternalRuntimeFramePreview({
           className="secondary-button"
           type="button"
           onClick={() => void saveSaveMemory()}
-          disabled={disableLifecycleActions}
+          disabled={disableRuntimeLifecycleActions}
         >
           Guardar SRAM
         </button>
@@ -1071,7 +1149,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void readRuntimeStatus()}
-            disabled={disableLifecycleActions}
+            disabled={disableRuntimeLifecycleActions}
           >
             Leer estado
           </button>
@@ -1079,7 +1157,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void prepareRuntime()}
-            disabled={disableLifecycleActions || !hasPrepareConfig}
+            disabled={disableRuntimeLifecycleActions || !hasPrepareConfig}
           >
             Preparar
           </button>
@@ -1087,7 +1165,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void loadCore()}
-            disabled={disableLifecycleActions}
+            disabled={disableRuntimeLifecycleActions}
           >
             Cargar core
           </button>
@@ -1095,7 +1173,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void initCore()}
-            disabled={disableLifecycleActions}
+            disabled={disableRuntimeLifecycleActions}
           >
             Inicializar core
           </button>
@@ -1103,7 +1181,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void loadGame()}
-            disabled={disableLifecycleActions}
+            disabled={disableRuntimeLifecycleActions}
           >
             Cargar ROM
           </button>
@@ -1111,7 +1189,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void refreshSaveMemory()}
-            disabled={disableLifecycleActions}
+            disabled={disableRuntimeLifecycleActions}
           >
             Actualizar memoria
           </button>
@@ -1119,7 +1197,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void loadSaveMemory()}
-            disabled={disableLifecycleActions}
+            disabled={disableRuntimeLifecycleActions}
           >
             Cargar SRAM
           </button>
@@ -1127,7 +1205,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void saveSaveMemory()}
-            disabled={disableLifecycleActions}
+            disabled={disableRuntimeLifecycleActions}
           >
             Guardar SRAM
           </button>
@@ -1135,7 +1213,7 @@ export function InternalRuntimeFramePreview({
             className="primary-button"
             type="button"
             onClick={() => void prepareLoadCoreInitLoadRom()}
-            disabled={disableLifecycleActions || !hasPrepareConfig}
+            disabled={disableRuntimeLifecycleActions || !hasPrepareConfig}
           >
             Preparar + cargar ROM
           </button>
@@ -1143,7 +1221,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void prepareLoadCoreInitLoadRomAndSram()}
-            disabled={disableLifecycleActions || !hasPrepareConfig}
+            disabled={disableRuntimeLifecycleActions || !hasPrepareConfig}
           >
             Preparar + cargar ROM + SRAM
           </button>
@@ -1151,21 +1229,21 @@ export function InternalRuntimeFramePreview({
       </div>
 
       <div className="internal-frame-preview__loop">
-        <strong>Sesion interna experimental</strong>
+        <strong>Loop debug por batches</strong>
         <span>{isDebugLoopRunning ? "Activo" : "Inactivo"}</span>
         <span>{`Preset: ${activePerformancePreset.label}`}</span>
         <span>{`Batch: ${activePerformancePreset.batchFrames} frames`}</span>
         <span>{`Objetivo: ${activePerformancePreset.targetFps} FPS`}</span>
         <span>{`Renderizados: ${debugLoopFramesRendered}`}</span>
-        <span>Experimental: todavia usa runtime debug.</span>
+        <span>Fallback debug: usa invoke y snapshots, no es el flujo principal.</span>
         <div className="internal-frame-preview__loop-buttons">
           <button
             className="primary-button"
             type="button"
             onClick={() => void startDebugRenderLoop()}
-            disabled={isActionLoading || isDebugLoopRunning}
+            disabled={isActionLoading || isDebugLoopRunning || isNativeSessionActive}
           >
-            Iniciar juego
+            Iniciar loop debug
           </button>
           <button
             className="secondary-button"
@@ -1173,7 +1251,7 @@ export function InternalRuntimeFramePreview({
             onClick={() => void stopDebugRenderLoop()}
             disabled={!isDebugLoopRunning}
           >
-            Detener
+            Detener loop debug
           </button>
         </div>
       </div>
@@ -1310,7 +1388,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void refreshSaveMemory()}
-            disabled={disableLifecycleActions}
+            disabled={disableRuntimeLifecycleActions}
           >
             Actualizar memoria
           </button>
@@ -1318,7 +1396,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void loadSaveMemory()}
-            disabled={disableLifecycleActions}
+            disabled={disableRuntimeLifecycleActions}
           >
             Cargar SRAM
           </button>
@@ -1326,7 +1404,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void saveSaveMemory()}
-            disabled={disableLifecycleActions}
+            disabled={disableRuntimeLifecycleActions}
           >
             Guardar SRAM
           </button>

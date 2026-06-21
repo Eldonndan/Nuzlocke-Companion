@@ -72,7 +72,9 @@ pub fn drain_audio_chunk(max_frames: Option<usize>) -> Result<InternalAudioChunk
     let frame_count = sample_count / AUDIO_CHANNELS as usize;
     let drain_count = frame_count * AUDIO_CHANNELS as usize;
     let samples = state.samples.drain(..drain_count).collect::<Vec<_>>();
-    state.total_frames_drained = state.total_frames_drained.saturating_add(frame_count as u64);
+    state.total_frames_drained = state
+        .total_frames_drained
+        .saturating_add(frame_count as u64);
 
     Ok(InternalAudioChunk {
         sample_rate: state.sample_rate,

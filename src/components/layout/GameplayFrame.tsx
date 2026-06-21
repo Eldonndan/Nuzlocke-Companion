@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { CapturedFrame, LiveCaptureFrame } from "../../shared/types";
 import type {
+  InternalFrameInfo,
   InternalFrameSnapshot,
   InternalFrameSnapshotBase64,
 } from "../../utils/internalRuntimeCommands";
@@ -21,7 +22,10 @@ type GameplayFrameProps = {
   liveFrame: LiveCaptureFrame | null;
   internalFrameSnapshot?: InternalFrameSnapshot | null;
   internalFrameSnapshotBase64?: InternalFrameSnapshotBase64 | null;
+  internalFrameInfo?: InternalFrameInfo | null;
   isInternalRuntime?: boolean;
+  usesExternalInternalRenderer?: boolean;
+  onInternalCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
   captureStatus: string;
   isCapturing: boolean;
   screenRef?: RefObject<HTMLDivElement | null>;
@@ -133,7 +137,10 @@ export function GameplayFrame({
   liveFrame,
   internalFrameSnapshot,
   internalFrameSnapshotBase64,
+  internalFrameInfo,
   isInternalRuntime = false,
+  usesExternalInternalRenderer = false,
+  onInternalCanvasReady,
   captureStatus,
   isCapturing,
   screenRef,
@@ -158,10 +165,12 @@ export function GameplayFrame({
   const internalNativeWidth =
     internalFrameSnapshotBase64?.width ??
     internalFrameSnapshot?.width ??
+    internalFrameInfo?.width ??
     fallbackInternalFrameSize.width;
   const internalNativeHeight =
     internalFrameSnapshotBase64?.height ??
     internalFrameSnapshot?.height ??
+    internalFrameInfo?.height ??
     fallbackInternalFrameSize.height;
   const internalDisplaySize = fitSizeToContainer(
     internalNativeWidth,
@@ -176,6 +185,10 @@ export function GameplayFrame({
     }
 
     const canvas = canvasRef.current;
+
+    if (isInternalRuntime && usesExternalInternalRenderer) {
+      return;
+    }
 
     if (isInternalRuntime && internalFrameSnapshotBase64) {
       drawRgbaFrame(
@@ -209,7 +222,13 @@ export function GameplayFrame({
     }
 
     drawRgbaFrame(canvas, liveFrame.width, liveFrame.height, pixels);
-  }, [internalFrameSnapshot, internalFrameSnapshotBase64, isInternalRuntime, liveFrame]);
+  }, [
+    internalFrameSnapshot,
+    internalFrameSnapshotBase64,
+    isInternalRuntime,
+    liveFrame,
+    usesExternalInternalRenderer,
+  ]);
 
   useEffect(() => {
     const element = localScreenRef.current;
@@ -237,8 +256,16 @@ export function GameplayFrame({
     return () => observer.disconnect();
   }, [screenRef]);
 
+  const setCanvasElement = useCallback((canvas: HTMLCanvasElement | null) => {
+    canvasRef.current = canvas;
+    onInternalCanvasReady?.(canvas);
+  }, [onInternalCanvasReady]);
+
   const hasInternalFrame = Boolean(
-    isInternalRuntime && (internalFrameSnapshotBase64 || internalFrameSnapshot),
+    isInternalRuntime &&
+      (usesExternalInternalRenderer ||
+        internalFrameSnapshotBase64 ||
+        internalFrameSnapshot),
   );
   const hasLiveFrame = Boolean(liveFrame);
   const shouldRenderCanvas = hasInternalFrame || hasLiveFrame;
@@ -261,7 +288,7 @@ export function GameplayFrame({
       >
         {shouldRenderCanvas ? (
           <canvas
-            ref={canvasRef}
+            ref={setCanvasElement}
             className={
               hasInternalFrame
                 ? "gameplay-frame__image gameplay-frame__image--internal"

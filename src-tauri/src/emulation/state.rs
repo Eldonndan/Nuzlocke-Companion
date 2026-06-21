@@ -1,24 +1,23 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
-use std::thread;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use super::audio::{
-    audio_info, clear_audio_buffer, drain_audio_chunk, reset_audio_state,
-};
-use super::input::{
-    clear_joypad_buttons, input_info, reset_input_state, set_joypad_button,
-};
+use super::audio::{audio_info, clear_audio_buffer, drain_audio_chunk, reset_audio_state};
+use super::input::{clear_joypad_buttons, input_info, reset_input_state, set_joypad_button};
 use super::libretro_host::LibretroHost;
 use super::types::{
     InternalAudioChunk, InternalAudioInfo, InternalCoreInfo, InternalEnvironmentInfo,
     InternalFrameInfo, InternalFrameLoopInfo, InternalFrameSnapshot, InternalFrameSnapshotBase64,
-    InternalInputInfo, InternalLoadedGameInfo, InternalRuntimePhase, InternalRuntimeStatus,
-    InternalSaveMemoryInfo, InternalSaveMemoryKind, InternalSaveOperationResult,
-    InternalSystemAvInfo, PrepareInternalRuntimeRequest, RunFrameLoopRequest,
-    SetJoypadButtonRequest,
+    InternalInputInfo, InternalLoadedGameInfo, InternalRuntimePhase, InternalRuntimeSessionInfo,
+    InternalRuntimeStatus, InternalSaveMemoryInfo, InternalSaveMemoryKind,
+    InternalSaveOperationResult, InternalSystemAvInfo, PrepareInternalRuntimeRequest,
+    RunFrameLoopRequest, SetJoypadButtonRequest,
 };
-use super::video::{latest_frame_snapshot_rgba, latest_frame_snapshot_rgba_base64, reset_video_state};
+use super::video::{
+    latest_frame_info, latest_frame_rgba_frame, latest_frame_snapshot_rgba,
+    latest_frame_snapshot_rgba_base64, reset_video_state,
+};
 
 const MAX_FRAME_LOOP_FRAMES: u32 = 600;
 const DEFAULT_FRAME_LOOP_FPS: u32 = 60;
@@ -26,9 +25,10 @@ const MAX_FRAME_LOOP_FPS: u32 = 120;
 
 #[derive(Default)]
 pub struct InternalEmulationState {
-    status: Mutex<InternalRuntimeStatus>,
-    host: Mutex<Option<LibretroHost>>,
+    status: Arc<Mutex<InternalRuntimeStatus>>,
+    host: Arc<Mutex<Option<LibretroHost>>>,
     frame_loop: FrameLoopControl,
+    session: Mutex<Option<RuntimeSessionHandle>>,
 }
 
 #[derive(Default)]
@@ -37,8 +37,18 @@ struct FrameLoopControl {
     cancel_requested: AtomicBool,
 }
 
+struct RuntimeSessionHandle {
+    stop_requested: Arc<AtomicBool>,
+    pause_requested: Arc<AtomicBool>,
+    frames_run: Arc<AtomicU64>,
+    last_error: Arc<Mutex<Option<String>>>,
+    target_fps: f64,
+    join_handle: Option<JoinHandle<()>>,
+}
+
 impl InternalEmulationState {
     pub fn status(&self) -> Result<InternalRuntimeStatus, String> {
+        self.cleanup_finished_session()?;
         self.status
             .lock()
             .map(|status| status.clone())
@@ -52,6 +62,16 @@ impl InternalEmulationState {
     pub fn latest_frame_snapshot_base64(&self) -> Result<InternalFrameSnapshotBase64, String> {
         latest_frame_snapshot_rgba_base64()?
             .ok_or_else(|| "No hay fotograma interno disponible.".to_string())
+    }
+
+    pub fn latest_frame_info(&self) -> Result<InternalFrameInfo, String> {
+        latest_frame_info()?.ok_or_else(|| "No hay fotograma interno disponible.".to_string())
+    }
+
+    pub fn latest_frame_rgba_bytes(&self) -> Result<Vec<u8>, String> {
+        let frame = latest_frame_rgba_frame()?
+            .ok_or_else(|| "No hay fotograma interno renderizable.".to_string())?;
+        Ok(frame.rgba)
     }
 
     pub fn drain_audio_chunk(
@@ -95,6 +115,7 @@ impl InternalEmulationState {
         request: PrepareInternalRuntimeRequest,
     ) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
+        self.ensure_session_inactive("preparar una nueva configuracion")?;
         let autosave_result = self.autosave_sram_if_available()?;
         // Preparing a new runtime configuration invalidates any loaded core.
         self.clear_host()?;
@@ -113,6 +134,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.session_info = None;
             status.input_info = InternalInputInfo::default();
             status.audio_info = InternalAudioInfo::default();
             status.av_info = None;
@@ -133,6 +155,7 @@ impl InternalEmulationState {
         environment_info: InternalEnvironmentInfo,
     ) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
+        self.ensure_session_inactive("cargar un nuevo core")?;
         let autosave_result = self.autosave_sram_if_available()?;
         {
             let mut loaded_host = self
@@ -153,6 +176,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.session_info = None;
             status.input_info = InternalInputInfo::default();
             status.audio_info = InternalAudioInfo::default();
             status.av_info = None;
@@ -168,6 +192,7 @@ impl InternalEmulationState {
 
     pub fn init_loaded_core(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
+        self.ensure_session_inactive("inicializar el core")?;
         let environment_info = {
             let mut loaded_host = self
                 .host
@@ -194,6 +219,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.session_info = None;
             status.input_info = InternalInputInfo::default();
             status.audio_info = InternalAudioInfo::default();
             status.av_info = None;
@@ -209,6 +235,7 @@ impl InternalEmulationState {
 
     pub fn deinit_loaded_core(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
+        self.ensure_session_inactive("desinicializar el core")?;
         let (environment_info, autosave_result) = {
             let mut loaded_host = self
                 .host
@@ -235,6 +262,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.session_info = None;
             status.input_info = InternalInputInfo::default();
             status.audio_info = InternalAudioInfo::default();
             status.av_info = None;
@@ -250,6 +278,7 @@ impl InternalEmulationState {
 
     pub fn load_game(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
+        self.ensure_session_inactive("cargar una ROM")?;
         let rom_path = self
             .status()?
             .rom_path
@@ -273,11 +302,23 @@ impl InternalEmulationState {
             let av_info = host.av_info();
             let audio_info = host.audio_info()?;
             let save_memory = host.save_memory_info().unwrap_or_default();
-            (loaded_game, environment_info, av_info, audio_info, save_memory)
+            (
+                loaded_game,
+                environment_info,
+                av_info,
+                audio_info,
+                save_memory,
+            )
         };
 
         reset_input_state();
-        self.mark_game_loaded(loaded_game, environment_info, av_info, audio_info, save_memory)
+        self.mark_game_loaded(
+            loaded_game,
+            environment_info,
+            av_info,
+            audio_info,
+            save_memory,
+        )
     }
 
     pub fn save_memory_info(&self) -> Result<InternalRuntimeStatus, String> {
@@ -342,6 +383,7 @@ impl InternalEmulationState {
 
     pub fn step_frame(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
+        self.ensure_session_allows_single_step()?;
         let (frame_info, environment_info, input_info, audio_info) = {
             let mut loaded_host = self.host.lock().map_err(|_| {
                 "No se pudo avanzar un frame en el host Libretro interno.".to_string()
@@ -373,6 +415,7 @@ impl InternalEmulationState {
         request: RunFrameLoopRequest,
     ) -> Result<InternalRuntimeStatus, String> {
         let loop_config = validate_frame_loop_request(request)?;
+        self.ensure_session_inactive("ejecutar batches debug")?;
 
         self.frame_loop
             .is_active
@@ -384,22 +427,17 @@ impl InternalEmulationState {
 
         let result = self.run_frame_loop_inner(&loop_config);
         let final_result = match result {
-            Ok((
-                latest_frame,
-                environment_info,
-                input_info,
-                audio_info,
-                frames_run,
-                cancelled,
-            )) => self.mark_frame_loop_finished(
-                latest_frame,
-                environment_info,
-                input_info,
-                audio_info,
-                &loop_config,
-                frames_run,
-                cancelled,
-            ),
+            Ok((latest_frame, environment_info, input_info, audio_info, frames_run, cancelled)) => {
+                self.mark_frame_loop_finished(
+                    latest_frame,
+                    environment_info,
+                    input_info,
+                    audio_info,
+                    &loop_config,
+                    frames_run,
+                    cancelled,
+                )
+            }
             Err(error) => {
                 let _ = self.mark_frame_loop_failed(&loop_config, &error);
                 Err(error)
@@ -436,8 +474,142 @@ impl InternalEmulationState {
         }
     }
 
+    pub fn start_session(&self) -> Result<InternalRuntimeStatus, String> {
+        self.ensure_frame_loop_inactive()?;
+        self.cleanup_finished_session()?;
+
+        {
+            let session = self
+                .session
+                .lock()
+                .map_err(|_| "No se pudo leer la sesion interna.".to_string())?;
+            if session.is_some() {
+                return Err("La sesion interna ya esta activa.".into());
+            }
+        }
+
+        let target_fps = {
+            let loaded_host = self
+                .host
+                .lock()
+                .map_err(|_| "No se pudo iniciar la sesion Libretro.".to_string())?;
+            let host = loaded_host
+                .as_ref()
+                .ok_or_else(|| "No Libretro core is loaded.".to_string())?;
+
+            if !host.is_initialized() {
+                return Err("Libretro core must be initialized before starting.".into());
+            }
+
+            if !host.is_game_loaded() {
+                return Err("A ROM must be loaded before starting.".into());
+            }
+
+            host.av_info()
+                .map(|av_info| av_info.fps)
+                .filter(|fps| fps.is_finite() && *fps > 0.0)
+                .unwrap_or(60.0)
+        };
+
+        let stop_requested = Arc::new(AtomicBool::new(false));
+        let pause_requested = Arc::new(AtomicBool::new(false));
+        let frames_run = Arc::new(AtomicU64::new(0));
+        let last_error = Arc::new(Mutex::new(None));
+        let host = Arc::clone(&self.host);
+        let status = Arc::clone(&self.status);
+        let thread_stop_requested = Arc::clone(&stop_requested);
+        let thread_pause_requested = Arc::clone(&pause_requested);
+        let thread_frames_run = Arc::clone(&frames_run);
+        let thread_last_error = Arc::clone(&last_error);
+
+        let join_handle = thread::spawn(move || {
+            run_native_session_loop(
+                host,
+                status,
+                thread_stop_requested,
+                thread_pause_requested,
+                thread_frames_run,
+                thread_last_error,
+                target_fps,
+            );
+        });
+
+        {
+            let mut session = self
+                .session
+                .lock()
+                .map_err(|_| "No se pudo guardar la sesion interna.".to_string())?;
+            *session = Some(RuntimeSessionHandle {
+                stop_requested,
+                pause_requested,
+                frames_run,
+                last_error,
+                target_fps,
+                join_handle: Some(join_handle),
+            });
+        }
+
+        self.update_status(|status| {
+            status.phase = InternalRuntimePhase::Running;
+            status.is_running = true;
+            status.last_error = None;
+            status.session_info = Some(InternalRuntimeSessionInfo {
+                is_active: true,
+                is_paused: false,
+                target_fps,
+                frames_run: 0,
+                last_error: None,
+            });
+        })
+    }
+
+    pub fn pause_session(&self) -> Result<InternalRuntimeStatus, String> {
+        self.cleanup_finished_session()?;
+        let session_info = {
+            let session = self
+                .session
+                .lock()
+                .map_err(|_| "No se pudo pausar la sesion interna.".to_string())?;
+            let Some(session) = session.as_ref() else {
+                return Err("No hay sesion interna activa.".into());
+            };
+            session.pause_requested.store(true, Ordering::SeqCst);
+            session.info(true)
+        };
+
+        self.update_status(|status| {
+            status.phase = InternalRuntimePhase::Paused;
+            status.is_running = false;
+            status.session_info = Some(session_info);
+            status.last_error = None;
+        })
+    }
+
+    pub fn resume_session(&self) -> Result<InternalRuntimeStatus, String> {
+        self.cleanup_finished_session()?;
+        let session_info = {
+            let session = self
+                .session
+                .lock()
+                .map_err(|_| "No se pudo continuar la sesion interna.".to_string())?;
+            let Some(session) = session.as_ref() else {
+                return Err("No hay sesion interna activa.".into());
+            };
+            session.pause_requested.store(false, Ordering::SeqCst);
+            session.info(true)
+        };
+
+        self.update_status(|status| {
+            status.phase = InternalRuntimePhase::Running;
+            status.is_running = true;
+            status.session_info = Some(session_info);
+            status.last_error = None;
+        })
+    }
+
     pub fn unload_game(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
+        self.ensure_session_inactive("descargar la ROM")?;
         let (environment_info, autosave_result) = {
             let mut loaded_host = self.host.lock().map_err(|_| {
                 "No se pudo descargar la ROM del host Libretro interno.".to_string()
@@ -465,6 +637,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.session_info = None;
             status.input_info = InternalInputInfo::default();
             status.audio_info = InternalAudioInfo::default();
             status.av_info = None;
@@ -488,6 +661,7 @@ impl InternalEmulationState {
     }
 
     pub fn stop(&self) -> Result<InternalRuntimeStatus, String> {
+        self.stop_session_if_active()?;
         self.ensure_frame_loop_inactive()?;
         let autosave_result = self.autosave_sram_if_available()?;
         self.clear_host()?;
@@ -502,6 +676,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.session_info = None;
             status.input_info = InternalInputInfo::default();
             status.audio_info = InternalAudioInfo::default();
             status.av_info = None;
@@ -517,6 +692,7 @@ impl InternalEmulationState {
 
     pub fn reset_idle(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
+        self.ensure_session_inactive("resetear el runtime")?;
         let autosave_result = self.autosave_sram_if_available()?;
         self.clear_host()?;
         reset_input_state();
@@ -570,6 +746,7 @@ impl InternalEmulationState {
             status.latest_frame = None;
             status.stepped_frames = 0;
             status.frame_loop = None;
+            status.session_info = None;
             status.input_info = InternalInputInfo::default();
             status.audio_info = audio_info;
             status.av_info = av_info;
@@ -787,6 +964,8 @@ impl InternalEmulationState {
     fn ensure_save_memory_accessible(&self) -> Result<(), String> {
         if self.frame_loop.is_active.load(Ordering::SeqCst) {
             Err("Cannot access save memory while frame loop is active.".into())
+        } else if self.is_session_active()? {
+            Err("Cannot access save memory while the internal session is active.".into())
         } else {
             Ok(())
         }
@@ -798,6 +977,107 @@ impl InternalEmulationState {
         } else {
             Ok(())
         }
+    }
+
+    fn ensure_session_inactive(&self, action: &str) -> Result<(), String> {
+        self.cleanup_finished_session()?;
+        if self.is_session_active()? {
+            Err(format!("Deten la sesion interna antes de {action}."))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn ensure_session_allows_single_step(&self) -> Result<(), String> {
+        self.cleanup_finished_session()?;
+        let session = self
+            .session
+            .lock()
+            .map_err(|_| "No se pudo leer la sesion interna.".to_string())?;
+        let Some(session) = session.as_ref() else {
+            return Ok(());
+        };
+
+        if session.pause_requested.load(Ordering::SeqCst) {
+            Ok(())
+        } else {
+            Err("Pausa la sesion interna antes de avanzar un frame manual.".into())
+        }
+    }
+
+    fn is_session_active(&self) -> Result<bool, String> {
+        self.session
+            .lock()
+            .map(|session| session.is_some())
+            .map_err(|_| "No se pudo leer la sesion interna.".to_string())
+    }
+
+    fn cleanup_finished_session(&self) -> Result<(), String> {
+        let mut finished_session = None;
+        {
+            let mut session = self
+                .session
+                .lock()
+                .map_err(|_| "No se pudo limpiar la sesion interna.".to_string())?;
+            let is_finished = session
+                .as_ref()
+                .and_then(|session| session.join_handle.as_ref())
+                .is_some_and(JoinHandle::is_finished);
+
+            if is_finished {
+                finished_session = session.take();
+            }
+        }
+
+        if let Some(mut session) = finished_session {
+            if let Some(join_handle) = session.join_handle.take() {
+                let _ = join_handle.join();
+            }
+            let session_info = session.info(false);
+            self.update_status(|status| {
+                status.is_running = false;
+                if status.is_rom_loaded {
+                    status.phase = InternalRuntimePhase::RomLoaded;
+                }
+                status.last_error = session_info.last_error.clone();
+                status.session_info = Some(session_info);
+            })?;
+        }
+
+        Ok(())
+    }
+
+    fn stop_session_if_active(&self) -> Result<(), String> {
+        let mut active_session = {
+            let mut session = self
+                .session
+                .lock()
+                .map_err(|_| "No se pudo detener la sesion interna.".to_string())?;
+            session.take()
+        };
+
+        if let Some(session) = active_session.as_ref() {
+            session.stop_requested.store(true, Ordering::SeqCst);
+        }
+
+        if let Some(mut session) = active_session.take() {
+            if let Some(join_handle) = session.join_handle.take() {
+                join_handle
+                    .join()
+                    .map_err(|_| "La sesion interna termino de forma inesperada.".to_string())?;
+            }
+            let session_info = session.info(false);
+            self.update_status(|status| {
+                status.is_running = false;
+                if status.is_rom_loaded {
+                    status.phase = InternalRuntimePhase::RomLoaded;
+                }
+                status.last_error = session_info.last_error.clone();
+                status.session_info = Some(session_info);
+            })?;
+        }
+
+        Ok(())
     }
 
     fn clear_frame_loop_control(&self) {
@@ -843,4 +1123,166 @@ fn validate_frame_loop_request(request: RunFrameLoopRequest) -> Result<FrameLoop
         max_frames: request.max_frames,
         target_fps,
     })
+}
+
+impl RuntimeSessionHandle {
+    fn info(&self, is_active: bool) -> InternalRuntimeSessionInfo {
+        let last_error = self.last_error.lock().ok().and_then(|error| error.clone());
+
+        InternalRuntimeSessionInfo {
+            is_active,
+            is_paused: is_active && self.pause_requested.load(Ordering::SeqCst),
+            target_fps: self.target_fps,
+            frames_run: self.frames_run.load(Ordering::SeqCst),
+            last_error,
+        }
+    }
+}
+
+fn run_native_session_loop(
+    host: Arc<Mutex<Option<LibretroHost>>>,
+    status: Arc<Mutex<InternalRuntimeStatus>>,
+    stop_requested: Arc<AtomicBool>,
+    pause_requested: Arc<AtomicBool>,
+    frames_run: Arc<AtomicU64>,
+    last_error: Arc<Mutex<Option<String>>>,
+    target_fps: f64,
+) {
+    let frame_duration = Duration::from_secs_f64(1.0 / target_fps.max(1.0));
+    let mut next_frame_at = Instant::now();
+
+    while !stop_requested.load(Ordering::SeqCst) {
+        if pause_requested.load(Ordering::SeqCst) {
+            update_session_status(
+                &status,
+                InternalRuntimePhase::Paused,
+                false,
+                true,
+                target_fps,
+                frames_run.load(Ordering::SeqCst),
+                None,
+            );
+            thread::sleep(Duration::from_millis(8));
+            next_frame_at = Instant::now();
+            continue;
+        }
+
+        let frame_result = {
+            match host.lock() {
+                Ok(mut loaded_host) => {
+                    let Some(host) = loaded_host.as_mut() else {
+                        return set_session_error_and_break(
+                            &status,
+                            &last_error,
+                            target_fps,
+                            frames_run.load(Ordering::SeqCst),
+                            "No Libretro core is loaded.".to_string(),
+                        );
+                    };
+                    host.step_frame().map(|frame_info| {
+                        let environment_info = host.environment_info();
+                        let input_info = input_info();
+                        let audio_info = audio_info();
+                        (frame_info, environment_info, input_info, audio_info)
+                    })
+                }
+                Err(_) => Err("No se pudo bloquear el host Libretro para la sesion.".to_string()),
+            }
+        };
+
+        let (frame_info, environment_info, input_info, audio_info) = match frame_result {
+            Ok((frame_info, environment_info, Ok(input_info), Ok(audio_info))) => {
+                (frame_info, environment_info, input_info, audio_info)
+            }
+            Ok((_, _, Err(error), _)) | Ok((_, _, _, Err(error))) | Err(error) => {
+                if let Ok(mut last_error) = last_error.lock() {
+                    *last_error = Some(error.clone());
+                }
+                update_session_status(
+                    &status,
+                    InternalRuntimePhase::Error,
+                    false,
+                    false,
+                    target_fps,
+                    frames_run.load(Ordering::SeqCst),
+                    Some(error),
+                );
+                break;
+            }
+        };
+
+        let total_frames = frames_run.fetch_add(1, Ordering::SeqCst).saturating_add(1);
+        if let Ok(mut status) = status.lock() {
+            status.phase = InternalRuntimePhase::Running;
+            status.environment_info = Some(environment_info);
+            status.input_info = input_info;
+            status.audio_info = audio_info;
+            status.latest_frame = Some(frame_info.clone());
+            status.stepped_frames = frame_info.frame_number;
+            status.is_core_loaded = true;
+            status.is_core_initialized = true;
+            status.is_rom_loaded = true;
+            status.is_running = true;
+            status.last_error = None;
+            status.session_info = Some(InternalRuntimeSessionInfo {
+                is_active: true,
+                is_paused: false,
+                target_fps,
+                frames_run: total_frames,
+                last_error: None,
+            });
+        }
+
+        next_frame_at += frame_duration;
+        let now = Instant::now();
+        if next_frame_at > now {
+            thread::sleep(next_frame_at - now);
+        } else {
+            next_frame_at = now;
+        }
+    }
+}
+
+fn update_session_status(
+    status: &Arc<Mutex<InternalRuntimeStatus>>,
+    phase: InternalRuntimePhase,
+    is_running: bool,
+    is_paused: bool,
+    target_fps: f64,
+    frames_run: u64,
+    error: Option<String>,
+) {
+    if let Ok(mut status) = status.lock() {
+        status.phase = phase;
+        status.is_running = is_running;
+        status.last_error = error.clone();
+        status.session_info = Some(InternalRuntimeSessionInfo {
+            is_active: is_running || is_paused,
+            is_paused,
+            target_fps,
+            frames_run,
+            last_error: error,
+        });
+    }
+}
+
+fn set_session_error_and_break(
+    status: &Arc<Mutex<InternalRuntimeStatus>>,
+    last_error: &Arc<Mutex<Option<String>>>,
+    target_fps: f64,
+    frames_run: u64,
+    error: String,
+) {
+    if let Ok(mut last_error) = last_error.lock() {
+        *last_error = Some(error.clone());
+    }
+    update_session_status(
+        status,
+        InternalRuntimePhase::Error,
+        false,
+        false,
+        target_fps,
+        frames_run,
+        Some(error),
+    );
 }

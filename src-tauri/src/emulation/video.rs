@@ -23,6 +23,13 @@ struct CapturedFrame {
     bytes: Vec<u8>,
 }
 
+pub struct InternalRgbaFrame {
+    pub info: InternalFrameInfo,
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
 static VIDEO_STATE: OnceLock<Mutex<VideoState>> = OnceLock::new();
 
 pub fn reset_video_state() {
@@ -49,12 +56,27 @@ pub fn latest_frame_info() -> Result<Option<InternalFrameInfo>, String> {
 }
 
 pub fn latest_frame_snapshot_rgba() -> Result<Option<InternalFrameSnapshot>, String> {
+    let Some(frame) = latest_frame_rgba_frame()? else {
+        return Ok(None);
+    };
+
+    let rgba_byte_len = frame.rgba.len();
+    Ok(Some(InternalFrameSnapshot {
+        info: frame.info,
+        width: frame.width,
+        height: frame.height,
+        rgba: frame.rgba,
+        rgba_byte_len,
+    }))
+}
+
+pub fn latest_frame_rgba_frame() -> Result<Option<InternalRgbaFrame>, String> {
     let state = video_state();
     let state = state
         .lock()
         .map_err(|_| "No se pudo leer el snapshot de video interno.".to_string())?;
 
-    state.latest_frame_snapshot_rgba()
+    state.latest_frame_rgba_frame()
 }
 
 pub fn latest_frame_snapshot_rgba_base64() -> Result<Option<InternalFrameSnapshotBase64>, String> {
@@ -158,25 +180,22 @@ impl VideoState {
         Ok(())
     }
 
-    fn latest_frame_snapshot_rgba(&self) -> Result<Option<InternalFrameSnapshot>, String> {
+    fn latest_frame_rgba_frame(&self) -> Result<Option<InternalRgbaFrame>, String> {
         let Some(frame) = self.latest_renderable_frame.as_ref() else {
             return Ok(None);
         };
 
         let rgba = convert_frame_to_rgba(frame)?;
-        let rgba_byte_len = rgba.len();
-
         let info = self
             .latest_callback
             .clone()
             .unwrap_or_else(|| frame.info.clone());
 
-        Ok(Some(InternalFrameSnapshot {
+        Ok(Some(InternalRgbaFrame {
             info,
             width: frame.info.width,
             height: frame.info.height,
             rgba,
-            rgba_byte_len,
         }))
     }
 }
