@@ -3,8 +3,10 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type RefObject,
+  useCallback,
   useEffect,
   useRef,
+  useState,
 } from "react";
 import type { CapturedFrame, LiveCaptureFrame } from "../../shared/types";
 import type {
@@ -31,6 +33,15 @@ type GameplayFrameProps = {
 };
 
 type RgbaPixels = Uint8ClampedArray<ArrayBuffer>;
+type CanvasDisplaySize = {
+  width: number;
+  height: number;
+};
+
+const fallbackInternalFrameSize = {
+  width: 240,
+  height: 160,
+};
 
 function drawRgbaFrame(
   canvas: HTMLCanvasElement,
@@ -58,6 +69,50 @@ function drawRgbaFrame(
 
 function focusKeyboardTarget(event: MouseEvent<HTMLDivElement>) {
   event.currentTarget.focus();
+}
+
+function fitSizeToContainer(
+  nativeWidth: number,
+  nativeHeight: number,
+  containerWidth: number,
+  containerHeight: number,
+): CanvasDisplaySize {
+  if (
+    nativeWidth <= 0 ||
+    nativeHeight <= 0 ||
+    containerWidth <= 0 ||
+    containerHeight <= 0
+  ) {
+    return { width: nativeWidth, height: nativeHeight };
+  }
+
+  const scale = Math.min(
+    containerWidth / nativeWidth,
+    containerHeight / nativeHeight,
+  );
+
+  return {
+    width: Math.max(1, Math.floor(nativeWidth * scale)),
+    height: Math.max(1, Math.floor(nativeHeight * scale)),
+  };
+}
+
+function greatestCommonDivisor(firstValue: number, secondValue: number): number {
+  let first = Math.abs(Math.round(firstValue));
+  let second = Math.abs(Math.round(secondValue));
+
+  while (second > 0) {
+    const next = first % second;
+    first = second;
+    second = next;
+  }
+
+  return first || 1;
+}
+
+function formatAspectRatio(width: number, height: number) {
+  const divisor = greatestCommonDivisor(width, height);
+  return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`;
 }
 
 function decodeBase64ToUint8ClampedArray(base64: string) {
@@ -88,7 +143,32 @@ export function GameplayFrame({
   onKeyboardKeyDown,
   onKeyboardKeyUp,
 }: GameplayFrameProps) {
+  const localScreenRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [screenSize, setScreenSize] = useState({ width: 0, height: 0 });
+
+  const setScreenElement = useCallback((element: HTMLDivElement | null) => {
+    localScreenRef.current = element;
+
+    if (screenRef) {
+      screenRef.current = element;
+    }
+  }, [screenRef]);
+
+  const internalNativeWidth =
+    internalFrameSnapshotBase64?.width ??
+    internalFrameSnapshot?.width ??
+    fallbackInternalFrameSize.width;
+  const internalNativeHeight =
+    internalFrameSnapshotBase64?.height ??
+    internalFrameSnapshot?.height ??
+    fallbackInternalFrameSize.height;
+  const internalDisplaySize = fitSizeToContainer(
+    internalNativeWidth,
+    internalNativeHeight,
+    screenSize.width,
+    screenSize.height,
+  );
 
   useEffect(() => {
     if (!canvasRef.current) {
@@ -131,17 +211,47 @@ export function GameplayFrame({
     drawRgbaFrame(canvas, liveFrame.width, liveFrame.height, pixels);
   }, [internalFrameSnapshot, internalFrameSnapshotBase64, isInternalRuntime, liveFrame]);
 
+  useEffect(() => {
+    const element = localScreenRef.current;
+
+    if (!element) {
+      return;
+    }
+
+    const updateSize = () => {
+      const nextWidth = Math.floor(element.clientWidth);
+      const nextHeight = Math.floor(element.clientHeight);
+
+      setScreenSize((currentSize) =>
+        currentSize.width === nextWidth && currentSize.height === nextHeight
+          ? currentSize
+          : { width: nextWidth, height: nextHeight },
+      );
+    };
+
+    updateSize();
+
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [screenRef]);
+
   const hasInternalFrame = Boolean(
     isInternalRuntime && (internalFrameSnapshotBase64 || internalFrameSnapshot),
   );
   const hasLiveFrame = Boolean(liveFrame);
   const shouldRenderCanvas = hasInternalFrame || hasLiveFrame;
+  const internalFrameLabel = `${internalNativeWidth}x${internalNativeHeight} · ${formatAspectRatio(
+    internalNativeWidth,
+    internalNativeHeight,
+  )}`;
 
   return (
     <section className="gameplay-frame" aria-label="Area de juego">
       <div
         className="gameplay-frame__screen"
-        ref={screenRef}
+        ref={setScreenElement}
         tabIndex={isKeyboardInputEnabled ? 0 : undefined}
         onFocus={isKeyboardInputEnabled ? onKeyboardFocus : undefined}
         onBlur={isKeyboardInputEnabled ? onKeyboardBlur : undefined}
@@ -152,7 +262,19 @@ export function GameplayFrame({
         {shouldRenderCanvas ? (
           <canvas
             ref={canvasRef}
-            className="gameplay-frame__image"
+            className={
+              hasInternalFrame
+                ? "gameplay-frame__image gameplay-frame__image--internal"
+                : "gameplay-frame__image gameplay-frame__image--legacy"
+            }
+            style={
+              hasInternalFrame
+                ? {
+                    width: `${internalDisplaySize.width}px`,
+                    height: `${internalDisplaySize.height}px`,
+                  }
+                : undefined
+            }
             aria-label={
               hasInternalFrame
                 ? `Runtime interno de ${gameName}`
@@ -186,7 +308,7 @@ export function GameplayFrame({
         <span>Vista de juego</span>
         <strong>
           {hasInternalFrame
-            ? "Runtime interno"
+            ? `Runtime interno · ${internalFrameLabel}`
             : hasLiveFrame
               ? "Captura activa"
               : capturedFrame

@@ -105,6 +105,7 @@ Status:
 - Made internal Libretro the default runtime for new runs and added local pickers for the Libretro core, GB/GBC/GBA ROM, and save directory.
 - Added a collapsible internal debug panel and frontend audio backlog controls for more comfortable real-play smoke tests.
 - Added an internal playable shell with side-panel tabs, base64 frame snapshots, and frontend performance presets.
+- Corrected internal frame aspect-ratio fitting so GB/GBC/GBA frames are centered without stretching.
 - Final continuous gameplay loop, efficient frame transport, physical input, real audio pipelines, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline

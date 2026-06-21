@@ -397,6 +397,12 @@ The internal runtime controller remains mounted inside the side panel even when 
 
 Frame snapshots now have a base64 command path in addition to the original RGBA array command. The frontend uses the base64 snapshot for internal gameplay rendering to avoid storing large `number[]` RGBA buffers in React state. This is still explicit invoke-based frame transport, not streaming, shared memory, WebGL, or the final renderer. Audio remains a debug Web Audio path.
 
+### Internal Frame Aspect-Ratio Fitting
+
+Internal gameplay frames use the snapshot's native dimensions as the canvas backing store, for example GBA `240x160` with a `3:2` aspect ratio. `GameplayFrame` observes the available screen area with `ResizeObserver`, computes the largest visual size that fits without changing aspect ratio, and applies that CSS size to the internal canvas.
+
+If the gameplay container does not match the native aspect ratio, the canvas remains centered with letterboxing or pillarboxing instead of being stretched. Legacy external live/captured frames keep their existing full-frame behavior.
+
 ### Mode-Aware Runtime UI
 
 The play screen now separates legacy external emulator controls from internal Libretro controls.
