@@ -44,6 +44,7 @@ type RenderedSnapshotMeta = {
 type InternalRuntimeFramePreviewProps = {
   runtimeConfig: InternalLibretroRuntimeConfig;
   onFrameSnapshot?: (snapshot: InternalFrameSnapshot | null) => void;
+  onDebugLoopRunningChange?: (isRunning: boolean) => void;
 };
 
 const DEBUG_LOOP_BATCH_FRAMES = 6;
@@ -119,6 +120,7 @@ function isEditableTarget(target: EventTarget | null) {
 export function InternalRuntimeFramePreview({
   runtimeConfig,
   onFrameSnapshot,
+  onDebugLoopRunningChange,
 }: InternalRuntimeFramePreviewProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -409,6 +411,7 @@ export function InternalRuntimeFramePreview({
     debugLoopCancelRequestedRef.current = false;
     debugLoopRunningRef.current = true;
     setIsDebugLoopRunning(true);
+    onDebugLoopRunningChange?.(true);
     setDebugLoopFramesRendered(0);
     setStatus("ready");
     setMessage("Loop debug activo...");
@@ -457,6 +460,7 @@ export function InternalRuntimeFramePreview({
       debugLoopRunningRef.current = false;
       debugLoopCancelRequestedRef.current = false;
       setIsDebugLoopRunning(false);
+      onDebugLoopRunningChange?.(false);
     }
   };
 
@@ -604,8 +608,10 @@ export function InternalRuntimeFramePreview({
       if (debugLoopRunningRef.current) {
         void cancelInternalRuntimeFrameLoop();
       }
+
+      onDebugLoopRunningChange?.(false);
     };
-  }, []);
+  }, [onDebugLoopRunningChange]);
 
   return (
     <section

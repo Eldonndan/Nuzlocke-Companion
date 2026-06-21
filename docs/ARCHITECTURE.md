@@ -354,6 +354,12 @@ The debug renderer has a small frontend optimization pass:
 
 This keeps the same invoke-based RGBA snapshot flow. It does not add streaming, shared memory, WebGL, frame events, or backend changes.
 
+### Debug Loop Teardown Guard
+
+The internal debug preview reports whether its frontend render loop is active to `MainPlayScreen`. While that loop is running, the play screen disables destructive runtime actions such as changing runtime configuration, resetting the run, or leaving to create a new run.
+
+This avoids calling internal teardown/autosave commands while the Rust host is actively executing a bounded frame batch. The guard is frontend coordination only; it does not change backend lifecycle rules, add Tauri commands, or make the debug loop the final gameplay runtime.
+
 ### Mode-Aware Runtime UI
 
 The play screen now separates legacy external emulator controls from internal Libretro controls.

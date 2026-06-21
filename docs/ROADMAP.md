@@ -99,6 +99,7 @@ Status:
 - Added mode-aware play-screen UI so internal Libretro hides legacy window/capture/overlay controls and avoids stale legacy frames.
 - Added SRAM autosave before destructive internal runtime lifecycle operations; this persists battery save memory only and is not a save state.
 - Reduced unnecessary frontend RGBA copies in the debug renderer while keeping the explicit invoke snapshot flow.
+- Added a frontend teardown guard so destructive play-screen actions are blocked while the internal debug loop is running.
 - Final continuous gameplay loop, efficient frame transport, physical input, real audio pipelines, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline

@@ -166,6 +166,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const [liveFrame, setLiveFrame] = useState<LiveCaptureFrame | null>(null);
   const [internalFrameSnapshot, setInternalFrameSnapshot] =
     useState<InternalFrameSnapshot | null>(null);
+  const [isInternalDebugLoopRunning, setIsInternalDebugLoopRunning] =
+    useState(false);
   const [frameStatus, setFrameStatus] = useState("");
   const [captureFps, setCaptureFps] = useState<CaptureFps>(30);
   const [captureSession, setCaptureSession] = useState<CaptureSessionStatus | null>(null);
@@ -197,6 +199,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const hasInternalRuntimeConfigured = isInternalRuntime && Boolean(
     runtimeConfig.corePath && runtimeConfig.romPath,
   );
+  const disableInternalDestructiveActions =
+    isInternalRuntime && isInternalDebugLoopRunning;
 
   const ensureLegacyExternalRuntime = () => {
     if (isLegacyRuntime) {
@@ -206,6 +210,15 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     setSessionStatus(legacyExternalOnlyMessage);
     setOverlayStatus(legacyExternalOnlyMessage);
     return false;
+  };
+
+  const ensureInternalDebugLoopStopped = (actionLabel: string) => {
+    if (isInternalRuntime && isInternalDebugLoopRunning) {
+      setSessionStatus(`Detén el loop debug antes de ${actionLabel}.`);
+      return false;
+    }
+
+    return true;
   };
 
   const stopInternalRuntimeForAutosave = async (context: string) => {
@@ -382,6 +395,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const updateRuntimeConfig = async (config: RuntimeConfig) => {
+    if (!ensureInternalDebugLoopStopped("cambiar el runtime")) {
+      return;
+    }
+
     const canContinue = await stopInternalRuntimeForAutosave(
       "cambiar la configuracion",
     );
@@ -1011,6 +1028,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       return;
     }
 
+    if (!ensureInternalDebugLoopStopped("restablecer la run")) {
+      return;
+    }
+
     const canContinue = await stopInternalRuntimeForAutosave("restablecer la run");
     if (!canContinue) {
       return;
@@ -1030,6 +1051,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const exitToCreateRun = async () => {
+    if (!ensureInternalDebugLoopStopped("salir de la run")) {
+      return;
+    }
+
     const canContinue = await stopInternalRuntimeForAutosave("salir de la run");
     if (!canContinue) {
       return;
@@ -1122,6 +1147,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
 
     if (!isInternalRuntime) {
       setInternalFrameSnapshot(null);
+      setIsInternalDebugLoopRunning(false);
     }
   }, [isInternalRuntime]);
 
@@ -1196,6 +1222,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
               }
               type="button"
               onClick={() => setIsEmulatorPanelOpen(true)}
+              disabled={disableInternalDestructiveActions}
             >
               {hasInternalRuntimeConfigured
                 ? "Runtime interno configurado"
@@ -1287,6 +1314,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
             className="secondary-button"
             type="button"
             onClick={() => setIsEmulatorPanelOpen(true)}
+            disabled={disableInternalDestructiveActions}
           >
             {isInternalRuntime ? "Runtime" : "Emulador"}
           </button>
@@ -1297,10 +1325,20 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           >
             Editar equipo
           </button>
-          <button className="secondary-button" type="button" onClick={resetRun}>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={resetRun}
+            disabled={disableInternalDestructiveActions}
+          >
             Restablecer run
           </button>
-          <button className="secondary-button" type="button" onClick={exitToCreateRun}>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={exitToCreateRun}
+            disabled={disableInternalDestructiveActions}
+          >
             Nueva run
           </button>
           <span className="save-status">{saveStatus}</span>
@@ -1328,6 +1366,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
         <InternalRuntimeFramePreview
           runtimeConfig={runtimeConfig}
           onFrameSnapshot={setInternalFrameSnapshot}
+          onDebugLoopRunningChange={setIsInternalDebugLoopRunning}
         />
       ) : null}
 
@@ -1359,6 +1398,12 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
                 ? "Directorio de guardado configurado"
                 : "sin directorio de guardado"}
             </span>
+            {isInternalDebugLoopRunning ? (
+              <strong>
+                Loop debug activo: deténlo antes de cambiar runtime, resetear o
+                salir.
+              </strong>
+            ) : null}
           </>
         ) : (
           <>
