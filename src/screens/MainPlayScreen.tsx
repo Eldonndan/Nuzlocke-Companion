@@ -54,6 +54,7 @@ import {
   saveRun,
 } from "../utils/runStorage";
 import type { InternalFrameSnapshot } from "../utils/internalRuntimeCommands";
+import { stopInternalRuntime } from "../utils/internalRuntimeCommands";
 import {
   createDefaultLegacyExternalRuntimeConfig,
   getRunRuntimeConfig,
@@ -205,6 +206,24 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     setSessionStatus(legacyExternalOnlyMessage);
     setOverlayStatus(legacyExternalOnlyMessage);
     return false;
+  };
+
+  const stopInternalRuntimeForAutosave = async (context: string) => {
+    if (!isInternalRuntime) {
+      return true;
+    }
+
+    try {
+      await stopInternalRuntime();
+      return true;
+    } catch (error) {
+      setSessionStatus(
+        typeof error === "string"
+          ? error
+          : `No se pudo detener el runtime interno antes de ${context}.`,
+      );
+      return false;
+    }
   };
 
   const getGameplayHostRect = (): HostRect | null => {
@@ -362,7 +381,14 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     }));
   };
 
-  const updateRuntimeConfig = (config: RuntimeConfig) => {
+  const updateRuntimeConfig = async (config: RuntimeConfig) => {
+    const canContinue = await stopInternalRuntimeForAutosave(
+      "cambiar la configuracion",
+    );
+    if (!canContinue) {
+      return;
+    }
+
     void stopNativeCapture("Captura detenida");
     void hideOverlay();
     void undockCurrentGame();
@@ -976,12 +1002,17 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     }
   };
 
-  const resetRun = () => {
+  const resetRun = async () => {
     const shouldReset = window.confirm(
       "¿Restablecer la run? Se perderán los cambios guardados localmente.",
     );
 
     if (!shouldReset) {
+      return;
+    }
+
+    const canContinue = await stopInternalRuntimeForAutosave("restablecer la run");
+    if (!canContinue) {
       return;
     }
 
@@ -998,7 +1029,12 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     setWindowStatus("Ventana de juego sin detectar");
   };
 
-  const exitToCreateRun = () => {
+  const exitToCreateRun = async () => {
+    const canContinue = await stopInternalRuntimeForAutosave("salir de la run");
+    if (!canContinue) {
+      return;
+    }
+
     void stopNativeCapture("Captura detenida");
     void hideOverlay();
     void undockCurrentGame();

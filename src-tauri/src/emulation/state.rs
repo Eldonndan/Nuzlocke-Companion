@@ -67,6 +67,7 @@ impl InternalEmulationState {
         request: PrepareInternalRuntimeRequest,
     ) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
+        let autosave_result = self.autosave_sram_if_available()?;
         // Preparing a new runtime configuration invalidates any loaded core.
         self.clear_host()?;
         reset_input_state();
@@ -85,7 +86,7 @@ impl InternalEmulationState {
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
             status.save_memory = Vec::new();
-            status.last_save_operation = None;
+            status.last_save_operation = autosave_result;
             status.is_core_loaded = false;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -101,6 +102,7 @@ impl InternalEmulationState {
         environment_info: InternalEnvironmentInfo,
     ) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
+        let autosave_result = self.autosave_sram_if_available()?;
         {
             let mut loaded_host = self
                 .host
@@ -121,7 +123,7 @@ impl InternalEmulationState {
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
             status.save_memory = Vec::new();
-            status.last_save_operation = None;
+            status.last_save_operation = autosave_result;
             status.is_core_loaded = true;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -170,7 +172,7 @@ impl InternalEmulationState {
 
     pub fn deinit_loaded_core(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
-        let environment_info = {
+        let (environment_info, autosave_result) = {
             let mut loaded_host = self
                 .host
                 .lock()
@@ -179,8 +181,9 @@ impl InternalEmulationState {
                 return Err("No Libretro core is loaded.".into());
             };
 
+            let autosave_result = Self::autosave_sram_for_host(host)?;
             host.deinit_core()?;
-            host.environment_info()
+            (host.environment_info(), autosave_result)
         };
 
         reset_input_state();
@@ -196,7 +199,7 @@ impl InternalEmulationState {
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
             status.save_memory = Vec::new();
-            status.last_save_operation = None;
+            status.last_save_operation = autosave_result;
             status.is_core_loaded = true;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -385,7 +388,7 @@ impl InternalEmulationState {
 
     pub fn unload_game(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
-        let environment_info = {
+        let (environment_info, autosave_result) = {
             let mut loaded_host = self.host.lock().map_err(|_| {
                 "No se pudo descargar la ROM del host Libretro interno.".to_string()
             })?;
@@ -397,8 +400,9 @@ impl InternalEmulationState {
                 return Err("Libretro core must be initialized before unloading a ROM.".into());
             }
 
+            let autosave_result = Self::autosave_sram_for_host(host)?;
             host.unload_game()?;
-            host.environment_info()
+            (host.environment_info(), autosave_result)
         };
 
         reset_input_state();
@@ -412,7 +416,7 @@ impl InternalEmulationState {
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
             status.save_memory = Vec::new();
-            status.last_save_operation = None;
+            status.last_save_operation = autosave_result;
             status.is_core_loaded = true;
             status.is_core_initialized = true;
             status.is_rom_loaded = false;
@@ -432,6 +436,7 @@ impl InternalEmulationState {
 
     pub fn stop(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
+        let autosave_result = self.autosave_sram_if_available()?;
         self.clear_host()?;
         reset_input_state();
         reset_video_state();
@@ -445,7 +450,7 @@ impl InternalEmulationState {
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
             status.save_memory = Vec::new();
-            status.last_save_operation = None;
+            status.last_save_operation = autosave_result;
             status.is_core_loaded = false;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -456,12 +461,32 @@ impl InternalEmulationState {
 
     pub fn reset_idle(&self) -> Result<InternalRuntimeStatus, String> {
         self.ensure_frame_loop_inactive()?;
+        let autosave_result = self.autosave_sram_if_available()?;
         self.clear_host()?;
         reset_input_state();
         reset_video_state();
         self.update_status(|status| {
             *status = InternalRuntimeStatus::default();
+            status.last_save_operation = autosave_result;
         })
+    }
+
+    fn autosave_sram_if_available(&self) -> Result<Option<InternalSaveOperationResult>, String> {
+        let mut loaded_host = self
+            .host
+            .lock()
+            .map_err(|_| "No se pudo ejecutar autosave SRAM.".to_string())?;
+        let Some(host) = loaded_host.as_mut() else {
+            return Ok(None);
+        };
+
+        Self::autosave_sram_for_host(host)
+    }
+
+    fn autosave_sram_for_host(
+        host: &mut LibretroHost,
+    ) -> Result<Option<InternalSaveOperationResult>, String> {
+        host.save_memory_to_disk_if_available(InternalSaveMemoryKind::SaveRam)
     }
 
     fn clear_host(&self) -> Result<(), String> {

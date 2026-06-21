@@ -179,6 +179,34 @@ impl LibretroHost {
         &mut self,
         kind: InternalSaveMemoryKind,
     ) -> Result<InternalSaveOperationResult, String> {
+        self.save_memory_to_disk_with_message(kind, "Memoria de guardado escrita en disco.")
+    }
+
+    pub fn save_memory_to_disk_if_available(
+        &mut self,
+        kind: InternalSaveMemoryKind,
+    ) -> Result<Option<InternalSaveOperationResult>, String> {
+        if !self.initialized || !self.is_game_loaded() {
+            return Ok(None);
+        }
+
+        let size_bytes = self.symbols.memory_size(save_memory_id(kind));
+        if size_bytes == 0 {
+            return Ok(None);
+        }
+
+        let message = match kind {
+            InternalSaveMemoryKind::SaveRam => "Autosave SRAM escrito en disco.",
+            InternalSaveMemoryKind::Rtc => "Autosave RTC escrito en disco.",
+        };
+        self.save_memory_to_disk_with_message(kind, message).map(Some)
+    }
+
+    fn save_memory_to_disk_with_message(
+        &mut self,
+        kind: InternalSaveMemoryKind,
+        message: impl Into<String>,
+    ) -> Result<InternalSaveOperationResult, String> {
         self.ensure_content_ready_for_save_memory()?;
         let (data_pointer, size_bytes) = self.memory_pointer_and_size(kind)?;
         let file_path = self.save_file_path(kind)?;
@@ -198,7 +226,7 @@ impl LibretroHost {
             file_path: file_path.to_string_lossy().to_string(),
             loaded: false,
             saved: true,
-            message: "Memoria de guardado escrita en disco.".to_string(),
+            message: message.into(),
         })
     }
 

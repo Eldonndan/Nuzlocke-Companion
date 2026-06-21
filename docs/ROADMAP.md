@@ -97,7 +97,8 @@ Status:
 - Added runtime configuration UI for choosing legacy external mode or internal Libretro mode with local core, ROM, and save-directory paths.
 - Added main `GameplayFrame` rendering for internal Libretro snapshots while keeping the debug preview as the control surface.
 - Added mode-aware play-screen UI so internal Libretro hides legacy window/capture/overlay controls and avoids stale legacy frames.
-- Final continuous gameplay loop, efficient frame transport, physical input, real audio pipelines, autosave, and save states remain out of this spike.
+- Added SRAM autosave before destructive internal runtime lifecycle operations; this persists battery save memory only and is not a save state.
+- Final continuous gameplay loop, efficient frame transport, physical input, real audio pipelines, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline
 

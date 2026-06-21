@@ -855,6 +855,11 @@ export function InternalRuntimeFramePreview({
       </div>
       <div className="internal-frame-preview__saves">
         <strong>Guardado SRAM</strong>
+        <span>
+          Autosave: al descargar, detener, resetear o cambiar runtime se
+          intentara persistir SRAM si esta disponible.
+        </span>
+        <span>No reemplaza el guardado dentro del juego.</span>
         <div className="internal-frame-preview__save-buttons">
           <button
             className="secondary-button"

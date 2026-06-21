@@ -275,7 +275,21 @@ The internal runtime now supports manual Libretro save memory persistence:
 - Reads `.srm` files back into the core only when the file size matches the core-reported memory size.
 - Exposes debug commands and UI buttons for refreshing save memory info, loading SRAM, and saving SRAM.
 
-This does not implement save states, `retro_serialize`, `retro_unserialize`, autosave, bundled ROM data, or bundled cores.
+This manual path does not implement save states, `retro_serialize`, `retro_unserialize`, bundled ROM data, or bundled cores.
+
+### SRAM Autosave
+
+The internal runtime now attempts to persist Libretro Save RAM before destructive lifecycle operations:
+
+- Preparing a new runtime configuration.
+- Replacing the loaded core.
+- Unloading content.
+- Deinitializing the core.
+- Stopping or resetting the internal runtime.
+
+This autosave uses the same `retro_get_memory_data` / `retro_get_memory_size` battery-save path as manual SRAM saving. It is not a save state, does not use `retro_serialize`, and does not capture arbitrary progress unless the game has already written that progress into SRAM. Players still need to use the in-game Pokemon save flow.
+
+If no Save RAM is exposed by the core/content, teardown continues normally. If Save RAM exists but the core returns an invalid pointer or the `.srm` file cannot be written, the destructive operation is blocked so the runtime is not discarded before the error is visible.
 
 ### Internal Runtime Debug Lifecycle Controls
 
