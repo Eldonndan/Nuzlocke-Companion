@@ -300,6 +300,17 @@ The internal debug preview can now accept local keyboard input when its preview 
 
 The implementation uses the existing Joypad Tauri commands and React `onKeyDown` / `onKeyUp` handlers on the focusable preview element. It does not install `window` or `document` listeners, does not capture keyboard globally, releases keyboard-held buttons on blur, and does not implement rebinding, Gamepad API support, or the final player input system.
 
+### Debug Render Loop
+
+The internal preview includes a frontend-only debug render loop:
+
+- React repeatedly calls `internal_runtime_run_frame_loop` with small bounded batches.
+- After each batch, React requests `internal_runtime_get_latest_frame_snapshot` and redraws the debug canvas.
+- The active batch can be asked to stop through `internal_runtime_cancel_frame_loop`.
+- Scoped keyboard input remains available while the loop is running because Joypad commands are separate from lifecycle commands.
+
+This is intentionally not the final gameplay loop. It still moves full RGBA snapshots through explicit invokes, does not stream frame events, does not use efficient GPU transport, does not implement audio, and does not change `internal_runtime_start`, pause, or resume.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

@@ -1,6 +1,13 @@
-import { type FocusEvent, type KeyboardEvent, useRef, useState } from "react";
+import {
+  type FocusEvent,
+  type KeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { InternalLibretroRuntimeConfig } from "../../shared/types";
 import {
+  cancelInternalRuntimeFrameLoop,
   getInternalRuntimeStatus,
   getLatestInternalRuntimeFrameSnapshot,
   initInternalRuntimeCore,
@@ -28,6 +35,9 @@ type PreviewStatus = "idle" | "loading" | "ready" | "empty" | "error";
 type InternalRuntimeFramePreviewProps = {
   runtimeConfig: InternalLibretroRuntimeConfig;
 };
+
+const DEBUG_LOOP_BATCH_FRAMES = 6;
+const DEBUG_LOOP_TARGET_FPS = 60;
 
 const joypadButtons: Array<{ button: InternalJoypadButton; label: string }> = [
   { button: "up", label: "Arriba" },
@@ -101,6 +111,8 @@ export function InternalRuntimeFramePreview({
 }: InternalRuntimeFramePreviewProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const debugLoopCancelRequestedRef = useRef(false);
+  const debugLoopRunningRef = useRef(false);
   const heldKeyboardKeysRef = useRef(new Set<string>());
   const heldKeyboardButtonsRef = useRef(new Set<InternalJoypadButton>());
   const [snapshot, setSnapshot] = useState<InternalFrameSnapshot | null>(null);
@@ -112,6 +124,8 @@ export function InternalRuntimeFramePreview({
     useState<InternalSaveOperationResult | null>(null);
   const [status, setStatus] = useState<PreviewStatus>("idle");
   const [message, setMessage] = useState("Sin fotograma renderizado.");
+  const [isDebugLoopRunning, setIsDebugLoopRunning] = useState(false);
+  const [debugLoopFramesRendered, setDebugLoopFramesRendered] = useState(0);
   const [isKeyboardFocused, setIsKeyboardFocused] = useState(false);
 
   const trimmedCore = runtimeConfig.core.trim();
@@ -123,6 +137,8 @@ export function InternalRuntimeFramePreview({
   );
   const pressedButtons = new Set(inputInfo?.pressedButtons ?? []);
   const saveRamInfo = saveMemory.find((memory) => memory.kind === "save-ram");
+  const isActionLoading = status === "loading";
+  const disableLifecycleActions = isActionLoading || isDebugLoopRunning;
 
   const applyRuntimeStatus = (nextStatus: InternalRuntimeStatus) => {
     setRuntimeStatus(nextStatus);
@@ -179,12 +195,15 @@ export function InternalRuntimeFramePreview({
     }
   };
 
-  const renderSnapshot = (nextSnapshot: InternalFrameSnapshot | null) => {
+  const renderSnapshot = (
+    nextSnapshot: InternalFrameSnapshot | null,
+    options: { silent?: boolean } = {},
+  ) => {
     if (!nextSnapshot) {
       setSnapshot(null);
       setStatus("empty");
       setMessage("No hay fotograma disponible todavia.");
-      return;
+      return false;
     }
 
     const canvas = canvasRef.current;
@@ -193,7 +212,7 @@ export function InternalRuntimeFramePreview({
     if (!canvas || !context) {
       setStatus("error");
       setMessage("No se pudo preparar el canvas.");
-      return;
+      return false;
     }
 
     const rgba = new Uint8ClampedArray(nextSnapshot.rgba);
@@ -202,7 +221,7 @@ export function InternalRuntimeFramePreview({
     if (rgba.length !== expectedLength) {
       setStatus("error");
       setMessage("El fotograma RGBA tiene un tamano inesperado.");
-      return;
+      return false;
     }
 
     canvas.width = nextSnapshot.width;
@@ -213,8 +232,11 @@ export function InternalRuntimeFramePreview({
       0,
     );
     setSnapshot(nextSnapshot);
-    setStatus("ready");
-    setMessage("Frame renderizado.");
+    if (!options.silent) {
+      setStatus("ready");
+      setMessage("Frame renderizado.");
+    }
+    return true;
   };
 
   const readRuntimeStatus = async () => {
@@ -358,6 +380,75 @@ export function InternalRuntimeFramePreview({
     await refreshSnapshot();
   };
 
+  const startDebugRenderLoop = async () => {
+    if (debugLoopRunningRef.current) {
+      return;
+    }
+
+    debugLoopCancelRequestedRef.current = false;
+    debugLoopRunningRef.current = true;
+    setIsDebugLoopRunning(true);
+    setDebugLoopFramesRendered(0);
+    setStatus("ready");
+    setMessage("Loop debug activo...");
+
+    let framesRendered = 0;
+
+    try {
+      while (!debugLoopCancelRequestedRef.current) {
+        const nextStatus = await runInternalRuntimeFrameLoop({
+          maxFrames: DEBUG_LOOP_BATCH_FRAMES,
+          targetFps: DEBUG_LOOP_TARGET_FPS,
+        });
+        applyRuntimeStatus(nextStatus);
+
+        const nextSnapshot = await getLatestInternalRuntimeFrameSnapshot();
+        const didRenderSnapshot = renderSnapshot(nextSnapshot, { silent: true });
+
+        if (!didRenderSnapshot) {
+          throw new Error("No se pudo renderizar el snapshot del loop debug.");
+        }
+
+        const renderedThisBatch =
+          nextStatus.frameLoop?.framesRun ?? DEBUG_LOOP_BATCH_FRAMES;
+        framesRendered += renderedThisBatch;
+        setDebugLoopFramesRendered(framesRendered);
+        setStatus("ready");
+        setMessage(`Loop debug activo - frames: ${framesRendered}`);
+      }
+
+      setStatus("ready");
+      setMessage("Loop debug detenido.");
+    } catch (error) {
+      debugLoopCancelRequestedRef.current = true;
+
+      try {
+        applyRuntimeStatus(await cancelInternalRuntimeFrameLoop());
+      } catch {
+        // Keep the original loop error visible.
+      }
+
+      setStatus("error");
+      setMessage(getErrorMessage(error));
+    } finally {
+      debugLoopRunningRef.current = false;
+      debugLoopCancelRequestedRef.current = false;
+      setIsDebugLoopRunning(false);
+    }
+  };
+
+  const stopDebugRenderLoop = async () => {
+    debugLoopCancelRequestedRef.current = true;
+    setMessage("Deteniendo loop debug...");
+
+    try {
+      applyRuntimeStatus(await cancelInternalRuntimeFrameLoop());
+    } catch (error) {
+      setStatus("error");
+      setMessage(getErrorMessage(error));
+    }
+  };
+
   const toggleJoypadButton = async (button: InternalJoypadButton) => {
     const pressed = !pressedButtons.has(button);
     await runRuntimeAction(
@@ -483,6 +574,16 @@ export function InternalRuntimeFramePreview({
     void releaseHeldKeyboardButtons();
   };
 
+  useEffect(() => {
+    return () => {
+      debugLoopCancelRequestedRef.current = true;
+
+      if (debugLoopRunningRef.current) {
+        void cancelInternalRuntimeFrameLoop();
+      }
+    };
+  }, []);
+
   return (
     <section
       ref={sectionRef}
@@ -508,7 +609,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void refreshSnapshot()}
-            disabled={status === "loading"}
+            disabled={isActionLoading || isDebugLoopRunning}
           >
             Renderizar ultimo frame
           </button>
@@ -516,7 +617,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void stepAndRender()}
-            disabled={status === "loading"}
+            disabled={isActionLoading || isDebugLoopRunning}
           >
             Avanzar fotograma y renderizar
           </button>
@@ -524,7 +625,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void runBatchAndRender()}
-            disabled={status === "loading"}
+            disabled={isActionLoading || isDebugLoopRunning}
           >
             60 fotogramas y renderizar
           </button>
@@ -566,7 +667,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void readRuntimeStatus()}
-            disabled={status === "loading"}
+            disabled={disableLifecycleActions}
           >
             Leer estado
           </button>
@@ -574,7 +675,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void prepareRuntime()}
-            disabled={status === "loading" || !hasPrepareConfig}
+            disabled={disableLifecycleActions || !hasPrepareConfig}
           >
             Preparar
           </button>
@@ -582,7 +683,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void loadCore()}
-            disabled={status === "loading"}
+            disabled={disableLifecycleActions}
           >
             Cargar core
           </button>
@@ -590,7 +691,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void initCore()}
-            disabled={status === "loading"}
+            disabled={disableLifecycleActions}
           >
             Inicializar core
           </button>
@@ -598,7 +699,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void loadGame()}
-            disabled={status === "loading"}
+            disabled={disableLifecycleActions}
           >
             Cargar ROM
           </button>
@@ -606,7 +707,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void refreshSaveMemory()}
-            disabled={status === "loading"}
+            disabled={disableLifecycleActions}
           >
             Actualizar memoria
           </button>
@@ -614,7 +715,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void loadSaveMemory()}
-            disabled={status === "loading"}
+            disabled={disableLifecycleActions}
           >
             Cargar SRAM
           </button>
@@ -622,7 +723,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void saveSaveMemory()}
-            disabled={status === "loading"}
+            disabled={disableLifecycleActions}
           >
             Guardar SRAM
           </button>
@@ -630,7 +731,7 @@ export function InternalRuntimeFramePreview({
             className="primary-button"
             type="button"
             onClick={() => void prepareLoadCoreInitLoadRom()}
-            disabled={status === "loading" || !hasPrepareConfig}
+            disabled={disableLifecycleActions || !hasPrepareConfig}
           >
             Preparar + cargar ROM
           </button>
@@ -638,9 +739,36 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void prepareLoadCoreInitLoadRomAndSram()}
-            disabled={status === "loading" || !hasPrepareConfig}
+            disabled={disableLifecycleActions || !hasPrepareConfig}
           >
             Preparar + cargar ROM + SRAM
+          </button>
+        </div>
+      </div>
+
+      <div className="internal-frame-preview__loop">
+        <strong>Loop debug</strong>
+        <span>{isDebugLoopRunning ? "Activo" : "Inactivo"}</span>
+        <span>{`Batch: ${DEBUG_LOOP_BATCH_FRAMES} frames`}</span>
+        <span>{`Objetivo: ${DEBUG_LOOP_TARGET_FPS} FPS`}</span>
+        <span>{`Renderizados: ${debugLoopFramesRendered}`}</span>
+        <span>Debug: usa invoke + RGBA completo; no es render final.</span>
+        <div className="internal-frame-preview__loop-buttons">
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => void startDebugRenderLoop()}
+            disabled={isActionLoading || isDebugLoopRunning}
+          >
+            Iniciar loop debug
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void stopDebugRenderLoop()}
+            disabled={!isDebugLoopRunning}
+          >
+            Detener loop debug
           </button>
         </div>
       </div>
@@ -675,7 +803,7 @@ export function InternalRuntimeFramePreview({
               }
               type="button"
               onClick={() => void toggleJoypadButton(button)}
-              disabled={status === "loading"}
+              disabled={isActionLoading}
             >
               {label}
             </button>
@@ -684,7 +812,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void clearJoypadButtons()}
-            disabled={status === "loading"}
+            disabled={isActionLoading}
           >
             Limpiar botones
           </button>
@@ -728,7 +856,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void refreshSaveMemory()}
-            disabled={status === "loading"}
+            disabled={disableLifecycleActions}
           >
             Actualizar memoria
           </button>
@@ -736,7 +864,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void loadSaveMemory()}
-            disabled={status === "loading"}
+            disabled={disableLifecycleActions}
           >
             Cargar SRAM
           </button>
@@ -744,7 +872,7 @@ export function InternalRuntimeFramePreview({
             className="secondary-button"
             type="button"
             onClick={() => void saveSaveMemory()}
-            disabled={status === "loading"}
+            disabled={disableLifecycleActions}
           >
             Guardar SRAM
           </button>

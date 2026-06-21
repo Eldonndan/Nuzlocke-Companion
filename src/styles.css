@@ -383,6 +383,7 @@ h3 {
 
 .internal-frame-preview__runtime,
 .internal-frame-preview__setup,
+.internal-frame-preview__loop,
 .internal-frame-preview__keyboard {
   display: flex;
   flex-wrap: wrap;
@@ -396,6 +397,8 @@ h3 {
 .internal-frame-preview__runtime > strong,
 .internal-frame-preview__runtime > span,
 .internal-frame-preview__setup > strong,
+.internal-frame-preview__loop > strong,
+.internal-frame-preview__loop > span,
 .internal-frame-preview__keyboard > strong,
 .internal-frame-preview__keyboard > span {
   max-width: 100%;
@@ -407,11 +410,13 @@ h3 {
 
 .internal-frame-preview__runtime > strong,
 .internal-frame-preview__setup > strong,
+.internal-frame-preview__loop > strong,
 .internal-frame-preview__keyboard > strong {
   color: #bdf7dc;
 }
 
-.internal-frame-preview__setup-buttons {
+.internal-frame-preview__setup-buttons,
+.internal-frame-preview__loop-buttons {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
