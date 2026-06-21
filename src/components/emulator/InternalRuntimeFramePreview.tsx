@@ -280,10 +280,11 @@ export function InternalRuntimeFramePreview({
       const context = audioContextRef.current ?? new AudioContext();
       audioContextRef.current = context;
       await context.resume();
-      nextAudioTimeRef.current = Math.max(
-        context.currentTime,
-        nextAudioTimeRef.current,
-      );
+
+      const nextStatus = await clearInternalRuntimeAudioBuffer();
+      applyRuntimeStatus(nextStatus);
+
+      nextAudioTimeRef.current = context.currentTime;
       isAudioDebugEnabledRef.current = true;
       setIsAudioDebugEnabled(true);
       setAudioDebugMessage("Audio debug activo.");
