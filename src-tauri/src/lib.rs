@@ -6,8 +6,10 @@ use emulation::commands::{
     internal_runtime_get_latest_frame_snapshot, internal_runtime_init_core,
     internal_runtime_load_core, internal_runtime_load_game, internal_runtime_pause,
     internal_runtime_prepare, internal_runtime_reset, internal_runtime_resume,
-    internal_runtime_run_frame_loop, internal_runtime_set_joypad_button, internal_runtime_start,
-    internal_runtime_step_frame, internal_runtime_stop, internal_runtime_unload_game,
+    internal_runtime_refresh_save_memory_info, internal_runtime_run_frame_loop,
+    internal_runtime_set_joypad_button, internal_runtime_start, internal_runtime_step_frame,
+    internal_runtime_stop, internal_runtime_unload_game,
+    internal_runtime_load_save_memory_from_disk, internal_runtime_save_memory_to_disk,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -1528,6 +1530,9 @@ pub fn run() {
             internal_runtime_cancel_frame_loop,
             internal_runtime_set_joypad_button,
             internal_runtime_clear_joypad_buttons,
+            internal_runtime_refresh_save_memory_info,
+            internal_runtime_save_memory_to_disk,
+            internal_runtime_load_save_memory_from_disk,
             internal_runtime_start,
             internal_runtime_pause,
             internal_runtime_resume,

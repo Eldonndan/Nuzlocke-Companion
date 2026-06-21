@@ -265,6 +265,18 @@ The internal runtime now has a minimal Joypad input path for debug testing:
 
 Input still assumes one active core at a time. There is no global keyboard capture, physical gamepad support, rebinding UI, or final gameplay input system yet.
 
+### Libretro Save Memory
+
+The internal runtime now supports manual Libretro save memory persistence:
+
+- Uses `retro_get_memory_data` and `retro_get_memory_size` after the core is initialized and content is loaded.
+- Supports manual SRAM (`save-ram`) persistence and reports RTC memory when the core exposes it.
+- Writes `.srm` files to the prepared `saveDirectory`, or next to the user's ROM when no save directory is configured.
+- Reads `.srm` files back into the core only when the file size matches the core-reported memory size.
+- Exposes debug commands and UI buttons for refreshing save memory info, loading SRAM, and saving SRAM.
+
+This does not implement save states, `retro_serialize`, `retro_unserialize`, autosave, bundled ROM data, or bundled cores.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

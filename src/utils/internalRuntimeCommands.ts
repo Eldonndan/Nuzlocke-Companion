@@ -80,6 +80,24 @@ export type InternalInputInfo = {
   stateQueryCount: number;
 };
 
+export type InternalSaveMemoryKind = "save-ram" | "rtc";
+
+export type InternalSaveMemoryInfo = {
+  kind: InternalSaveMemoryKind;
+  sizeBytes: number;
+  filePath?: string | null;
+  existsOnDisk: boolean;
+};
+
+export type InternalSaveOperationResult = {
+  kind: InternalSaveMemoryKind;
+  sizeBytes: number;
+  filePath: string;
+  loaded: boolean;
+  saved: boolean;
+  message: string;
+};
+
 export type RunFrameLoopRequest = {
   maxFrames: number;
   targetFps?: number | null;
@@ -107,6 +125,8 @@ export type InternalRuntimeStatus = {
   steppedFrames: number;
   frameLoop?: InternalFrameLoopInfo | null;
   inputInfo: InternalInputInfo;
+  saveMemory: InternalSaveMemoryInfo[];
+  lastSaveOperation?: InternalSaveOperationResult | null;
   isCoreLoaded: boolean;
   isCoreInitialized: boolean;
   isRomLoaded: boolean;
@@ -181,6 +201,29 @@ export function setInternalRuntimeJoypadButton(
 
 export function clearInternalRuntimeJoypadButtons() {
   return invoke<InternalRuntimeStatus>("internal_runtime_clear_joypad_buttons");
+}
+
+export function refreshInternalRuntimeSaveMemoryInfo() {
+  return invoke<InternalRuntimeStatus>(
+    "internal_runtime_refresh_save_memory_info",
+  );
+}
+
+export function saveInternalRuntimeMemoryToDisk(
+  kind: InternalSaveMemoryKind = "save-ram",
+) {
+  return invoke<InternalRuntimeStatus>("internal_runtime_save_memory_to_disk", {
+    kind,
+  });
+}
+
+export function loadInternalRuntimeSaveMemoryFromDisk(
+  kind: InternalSaveMemoryKind = "save-ram",
+) {
+  return invoke<InternalRuntimeStatus>(
+    "internal_runtime_load_save_memory_from_disk",
+    { kind },
+  );
 }
 
 export function startInternalRuntime() {

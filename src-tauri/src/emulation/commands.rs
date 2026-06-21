@@ -4,7 +4,7 @@ use super::libretro_host::{LibretroHost, LibretroHostConfig};
 use super::state::InternalEmulationState;
 use super::types::{
     InternalFrameSnapshot, InternalRuntimeStatus, PrepareInternalRuntimeRequest,
-    RunFrameLoopRequest, SetJoypadButtonRequest,
+    RunFrameLoopRequest, SetJoypadButtonRequest, InternalSaveMemoryKind,
 };
 
 const NOT_IMPLEMENTED: &str = "Internal Libretro runtime is not implemented yet.";
@@ -180,6 +180,47 @@ pub fn internal_runtime_clear_joypad_buttons(
     state: State<'_, InternalEmulationState>,
 ) -> Result<InternalRuntimeStatus, String> {
     state.clear_joypad_buttons()
+}
+
+#[tauri::command]
+pub fn internal_runtime_refresh_save_memory_info(
+    state: State<'_, InternalEmulationState>,
+) -> Result<InternalRuntimeStatus, String> {
+    match state.save_memory_info() {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            state.mark_error(&error)?;
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn internal_runtime_save_memory_to_disk(
+    state: State<'_, InternalEmulationState>,
+    kind: InternalSaveMemoryKind,
+) -> Result<InternalRuntimeStatus, String> {
+    match state.save_memory_to_disk(kind) {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            state.mark_error(&error)?;
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn internal_runtime_load_save_memory_from_disk(
+    state: State<'_, InternalEmulationState>,
+    kind: InternalSaveMemoryKind,
+) -> Result<InternalRuntimeStatus, String> {
+    match state.load_save_memory_from_disk(kind) {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            state.mark_error(&error)?;
+            Err(error)
+        }
+    }
 }
 
 #[tauri::command]

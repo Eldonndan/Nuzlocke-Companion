@@ -90,7 +90,8 @@ Status:
 - Added a bounded, cancelable frame-loop command for controlled batches.
 - Added explicit RGBA snapshot transport and a manual debug canvas preview.
 - Added minimal Joypad input callbacks and debug controls for manual testing.
-- Final continuous gameplay loop, efficient frame transport, physical input, real audio pipelines, and saves remain out of this spike.
+- Added manual SRAM save memory load/save commands and debug controls.
+- Final continuous gameplay loop, efficient frame transport, physical input, real audio pipelines, autosave, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline
 

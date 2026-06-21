@@ -48,6 +48,8 @@ type RetroDeinit = unsafe extern "C" fn();
 type RetroLoadGame = unsafe extern "C" fn(game: *const RetroGameInfo) -> bool;
 type RetroUnloadGame = unsafe extern "C" fn();
 type RetroRun = unsafe extern "C" fn();
+type RetroGetMemoryData = unsafe extern "C" fn(id: c_uint) -> *mut c_void;
+type RetroGetMemorySize = unsafe extern "C" fn(id: c_uint) -> usize;
 
 pub struct LibretroCoreSymbols {
     retro_api_version: RetroApiVersion,
@@ -63,6 +65,8 @@ pub struct LibretroCoreSymbols {
     retro_load_game: RetroLoadGame,
     retro_unload_game: RetroUnloadGame,
     retro_run: RetroRun,
+    retro_get_memory_data: RetroGetMemoryData,
+    retro_get_memory_size: RetroGetMemorySize,
 }
 
 impl LibretroCoreSymbols {
@@ -88,6 +92,8 @@ impl LibretroCoreSymbols {
                 retro_load_game: load_symbol(library, b"retro_load_game\0")?,
                 retro_unload_game: load_symbol(library, b"retro_unload_game\0")?,
                 retro_run: load_symbol(library, b"retro_run\0")?,
+                retro_get_memory_data: load_symbol(library, b"retro_get_memory_data\0")?,
+                retro_get_memory_size: load_symbol(library, b"retro_get_memory_size\0")?,
             })
         }
     }
@@ -176,6 +182,19 @@ impl LibretroCoreSymbols {
         unsafe {
             (self.retro_run)();
         }
+    }
+
+    pub fn memory_data(&self, id: c_uint) -> *mut c_void {
+        // SAFETY: `LibretroHost` calls this only after a core is initialized and
+        // content is loaded. The returned pointer is owned by the core and must be
+        // copied immediately; it is never stored by the frontend.
+        unsafe { (self.retro_get_memory_data)(id) }
+    }
+
+    pub fn memory_size(&self, id: c_uint) -> usize {
+        // SAFETY: `LibretroHost` calls this only after a core is initialized and
+        // content is loaded. The returned size is validated before copying memory.
+        unsafe { (self.retro_get_memory_size)(id) }
     }
 }
 

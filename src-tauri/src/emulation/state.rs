@@ -10,7 +10,8 @@ use super::libretro_host::LibretroHost;
 use super::types::{
     InternalCoreInfo, InternalEnvironmentInfo, InternalFrameInfo, InternalFrameLoopInfo,
     InternalFrameSnapshot, InternalInputInfo, InternalLoadedGameInfo, InternalRuntimePhase,
-    InternalRuntimeStatus, PrepareInternalRuntimeRequest, RunFrameLoopRequest,
+    InternalRuntimeStatus, InternalSaveMemoryInfo, InternalSaveMemoryKind,
+    InternalSaveOperationResult, PrepareInternalRuntimeRequest, RunFrameLoopRequest,
     SetJoypadButtonRequest,
 };
 use super::video::{latest_frame_snapshot_rgba, reset_video_state};
@@ -83,6 +84,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.save_memory = Vec::new();
+            status.last_save_operation = None;
             status.is_core_loaded = false;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -117,6 +120,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.save_memory = Vec::new();
+            status.last_save_operation = None;
             status.is_core_loaded = true;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -153,6 +158,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.save_memory = Vec::new();
+            status.last_save_operation = None;
             status.is_core_loaded = true;
             status.is_core_initialized = true;
             status.is_rom_loaded = false;
@@ -188,6 +195,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.save_memory = Vec::new();
+            status.last_save_operation = None;
             status.is_core_loaded = true;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -203,7 +212,7 @@ impl InternalEmulationState {
             .rom_path
             .ok_or_else(|| "ROM path is not prepared.".to_string())?;
 
-        let (loaded_game, environment_info) = {
+        let (loaded_game, environment_info, save_memory) = {
             let mut loaded_host = self
                 .host
                 .lock()
@@ -218,11 +227,72 @@ impl InternalEmulationState {
 
             let loaded_game = host.load_game(&rom_path)?;
             let environment_info = host.environment_info();
-            (loaded_game, environment_info)
+            let save_memory = host.save_memory_info().unwrap_or_default();
+            (loaded_game, environment_info, save_memory)
         };
 
         reset_input_state();
-        self.mark_game_loaded(loaded_game, environment_info)
+        self.mark_game_loaded(loaded_game, environment_info, save_memory)
+    }
+
+    pub fn save_memory_info(&self) -> Result<InternalRuntimeStatus, String> {
+        self.ensure_save_memory_accessible()?;
+        let save_memory = {
+            let loaded_host = self
+                .host
+                .lock()
+                .map_err(|_| "No se pudo consultar la memoria de guardado.".to_string())?;
+            let host = loaded_host
+                .as_ref()
+                .ok_or_else(|| "No Libretro core is loaded.".to_string())?;
+            host.save_memory_info()?
+        };
+
+        self.update_status(|status| {
+            status.save_memory = save_memory;
+        })
+    }
+
+    pub fn save_memory_to_disk(
+        &self,
+        kind: InternalSaveMemoryKind,
+    ) -> Result<InternalRuntimeStatus, String> {
+        self.ensure_save_memory_accessible()?;
+        let (result, save_memory) = {
+            let mut loaded_host = self
+                .host
+                .lock()
+                .map_err(|_| "No se pudo guardar la memoria de guardado.".to_string())?;
+            let host = loaded_host
+                .as_mut()
+                .ok_or_else(|| "No Libretro core is loaded.".to_string())?;
+            let result = host.save_memory_to_disk(kind)?;
+            let save_memory = host.save_memory_info()?;
+            (result, save_memory)
+        };
+
+        self.mark_save_operation(result, save_memory)
+    }
+
+    pub fn load_save_memory_from_disk(
+        &self,
+        kind: InternalSaveMemoryKind,
+    ) -> Result<InternalRuntimeStatus, String> {
+        self.ensure_save_memory_accessible()?;
+        let (result, save_memory) = {
+            let mut loaded_host = self
+                .host
+                .lock()
+                .map_err(|_| "No se pudo cargar la memoria de guardado.".to_string())?;
+            let host = loaded_host
+                .as_mut()
+                .ok_or_else(|| "No Libretro core is loaded.".to_string())?;
+            let result = host.load_save_memory_from_disk(kind)?;
+            let save_memory = host.save_memory_info()?;
+            (result, save_memory)
+        };
+
+        self.mark_save_operation(result, save_memory)
     }
 
     pub fn step_frame(&self) -> Result<InternalRuntimeStatus, String> {
@@ -341,6 +411,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.save_memory = Vec::new();
+            status.last_save_operation = None;
             status.is_core_loaded = true;
             status.is_core_initialized = true;
             status.is_rom_loaded = false;
@@ -372,6 +444,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.save_memory = Vec::new();
+            status.last_save_operation = None;
             status.is_core_loaded = false;
             status.is_core_initialized = false;
             status.is_rom_loaded = false;
@@ -403,6 +477,7 @@ impl InternalEmulationState {
         &self,
         loaded_game: InternalLoadedGameInfo,
         environment_info: InternalEnvironmentInfo,
+        save_memory: Vec<InternalSaveMemoryInfo>,
     ) -> Result<InternalRuntimeStatus, String> {
         self.update_status(|status| {
             status.phase = InternalRuntimePhase::RomLoaded;
@@ -412,6 +487,8 @@ impl InternalEmulationState {
             status.stepped_frames = 0;
             status.frame_loop = None;
             status.input_info = InternalInputInfo::default();
+            status.save_memory = save_memory;
+            status.last_save_operation = None;
             status.is_core_loaded = true;
             status.is_core_initialized = true;
             status.is_rom_loaded = true;
@@ -600,6 +677,25 @@ impl InternalEmulationState {
                 last_error: Some(error.to_string()),
             });
         })
+    }
+
+    fn mark_save_operation(
+        &self,
+        result: InternalSaveOperationResult,
+        save_memory: Vec<InternalSaveMemoryInfo>,
+    ) -> Result<InternalRuntimeStatus, String> {
+        self.update_status(|status| {
+            status.save_memory = save_memory;
+            status.last_save_operation = Some(result);
+        })
+    }
+
+    fn ensure_save_memory_accessible(&self) -> Result<(), String> {
+        if self.frame_loop.is_active.load(Ordering::SeqCst) {
+            Err("Cannot access save memory while frame loop is active.".into())
+        } else {
+            Ok(())
+        }
     }
 
     fn ensure_frame_loop_inactive(&self) -> Result<(), String> {

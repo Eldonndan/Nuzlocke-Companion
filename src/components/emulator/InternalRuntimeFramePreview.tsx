@@ -4,10 +4,15 @@ import {
   runInternalRuntimeFrameLoop,
   stepInternalRuntimeFrame,
   clearInternalRuntimeJoypadButtons,
+  loadInternalRuntimeSaveMemoryFromDisk,
+  refreshInternalRuntimeSaveMemoryInfo,
+  saveInternalRuntimeMemoryToDisk,
   setInternalRuntimeJoypadButton,
   type InternalJoypadButton,
   type InternalFrameSnapshot,
   type InternalInputInfo,
+  type InternalSaveMemoryInfo,
+  type InternalSaveOperationResult,
 } from "../../utils/internalRuntimeCommands";
 
 type PreviewStatus = "idle" | "loading" | "ready" | "empty" | "error";
@@ -50,10 +55,14 @@ export function InternalRuntimeFramePreview() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [snapshot, setSnapshot] = useState<InternalFrameSnapshot | null>(null);
   const [inputInfo, setInputInfo] = useState<InternalInputInfo | null>(null);
+  const [saveMemory, setSaveMemory] = useState<InternalSaveMemoryInfo[]>([]);
+  const [lastSaveOperation, setLastSaveOperation] =
+    useState<InternalSaveOperationResult | null>(null);
   const [status, setStatus] = useState<PreviewStatus>("idle");
   const [message, setMessage] = useState("Sin fotograma renderizado.");
 
   const pressedButtons = new Set(inputInfo?.pressedButtons ?? []);
+  const saveRamInfo = saveMemory.find((memory) => memory.kind === "save-ram");
 
   const renderSnapshot = (nextSnapshot: InternalFrameSnapshot | null) => {
     if (!nextSnapshot) {
@@ -112,6 +121,8 @@ export function InternalRuntimeFramePreview() {
     try {
       const nextStatus = await stepInternalRuntimeFrame();
       setInputInfo(nextStatus.inputInfo);
+      setSaveMemory(nextStatus.saveMemory);
+      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
       renderSnapshot(await getLatestInternalRuntimeFrameSnapshot());
     } catch (error) {
       setStatus("error");
@@ -129,6 +140,8 @@ export function InternalRuntimeFramePreview() {
         targetFps: 60,
       });
       setInputInfo(nextStatus.inputInfo);
+      setSaveMemory(nextStatus.saveMemory);
+      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
       renderSnapshot(await getLatestInternalRuntimeFrameSnapshot());
     } catch (error) {
       setStatus("error");
@@ -147,6 +160,8 @@ export function InternalRuntimeFramePreview() {
         pressed,
       });
       setInputInfo(nextStatus.inputInfo);
+      setSaveMemory(nextStatus.saveMemory);
+      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
       setStatus("ready");
       setMessage(pressed ? "Botón presionado." : "Botón soltado.");
     } catch (error) {
@@ -162,8 +177,58 @@ export function InternalRuntimeFramePreview() {
     try {
       const nextStatus = await clearInternalRuntimeJoypadButtons();
       setInputInfo(nextStatus.inputInfo);
+      setSaveMemory(nextStatus.saveMemory);
+      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
       setStatus("ready");
       setMessage("Botones limpiados.");
+    } catch (error) {
+      setStatus("error");
+      setMessage(getErrorMessage(error));
+    }
+  };
+
+  const refreshSaveMemory = async () => {
+    setStatus("loading");
+    setMessage("Consultando memoria de guardado...");
+
+    try {
+      const nextStatus = await refreshInternalRuntimeSaveMemoryInfo();
+      setSaveMemory(nextStatus.saveMemory);
+      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
+      setStatus("ready");
+      setMessage("Memoria de guardado actualizada.");
+    } catch (error) {
+      setStatus("error");
+      setMessage(getErrorMessage(error));
+    }
+  };
+
+  const loadSaveMemory = async () => {
+    setStatus("loading");
+    setMessage("Cargando SRAM...");
+
+    try {
+      const nextStatus = await loadInternalRuntimeSaveMemoryFromDisk("save-ram");
+      setSaveMemory(nextStatus.saveMemory);
+      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
+      setStatus("ready");
+      setMessage(nextStatus.lastSaveOperation?.message ?? "SRAM cargada.");
+    } catch (error) {
+      setStatus("error");
+      setMessage(getErrorMessage(error));
+    }
+  };
+
+  const saveSaveMemory = async () => {
+    setStatus("loading");
+    setMessage("Guardando SRAM...");
+
+    try {
+      const nextStatus = await saveInternalRuntimeMemoryToDisk("save-ram");
+      setSaveMemory(nextStatus.saveMemory);
+      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
+      setStatus("ready");
+      setMessage(nextStatus.lastSaveOperation?.message ?? "SRAM guardada.");
     } catch (error) {
       setStatus("error");
       setMessage(getErrorMessage(error));
@@ -261,6 +326,43 @@ export function InternalRuntimeFramePreview() {
             inputInfo?.stateQueryCount ?? 0
           }`}
         </span>
+      </div>
+      <div className="internal-frame-preview__saves">
+        <strong>Guardado SRAM</strong>
+        <div className="internal-frame-preview__save-buttons">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void refreshSaveMemory()}
+            disabled={status === "loading"}
+          >
+            Actualizar memoria
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void loadSaveMemory()}
+            disabled={status === "loading"}
+          >
+            Cargar SRAM
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void saveSaveMemory()}
+            disabled={status === "loading"}
+          >
+            Guardar SRAM
+          </button>
+        </div>
+        <span>
+          {saveRamInfo
+            ? `${saveRamInfo.sizeBytes} bytes`
+            : "SRAM no consultada"}
+        </span>
+        <span>{saveRamInfo?.existsOnDisk ? "Existe en disco" : "Sin archivo"}</span>
+        {saveRamInfo?.filePath ? <span>{saveRamInfo.filePath}</span> : null}
+        {lastSaveOperation ? <span>{lastSaveOperation.message}</span> : null}
       </div>
     </section>
   );

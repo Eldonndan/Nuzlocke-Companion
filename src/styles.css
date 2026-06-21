@@ -399,6 +399,35 @@ h3 {
   gap: 8px;
 }
 
+.internal-frame-preview__saves {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #c6ddf5;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.internal-frame-preview__saves > strong,
+.internal-frame-preview__saves > span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 5px 9px;
+}
+
+.internal-frame-preview__saves > strong {
+  color: #bdf7dc;
+}
+
+.internal-frame-preview__save-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .play-layout {
   display: grid;
   grid-template-columns: minmax(680px, 1fr) minmax(310px, 342px);

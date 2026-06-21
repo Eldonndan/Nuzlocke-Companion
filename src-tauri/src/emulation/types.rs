@@ -35,6 +35,8 @@ pub struct InternalRuntimeStatus {
     pub stepped_frames: u64,
     pub frame_loop: Option<InternalFrameLoopInfo>,
     pub input_info: InternalInputInfo,
+    pub save_memory: Vec<InternalSaveMemoryInfo>,
+    pub last_save_operation: Option<InternalSaveOperationResult>,
     pub is_core_loaded: bool,
     pub is_core_initialized: bool,
     pub is_rom_loaded: bool,
@@ -57,6 +59,8 @@ impl Default for InternalRuntimeStatus {
             stepped_frames: 0,
             frame_loop: None,
             input_info: InternalInputInfo::default(),
+            save_memory: Vec::new(),
+            last_save_operation: None,
             is_core_loaded: false,
             is_core_initialized: false,
             is_rom_loaded: false,
@@ -177,4 +181,37 @@ pub struct InternalInputInfo {
     pub pressed_buttons: Vec<InternalJoypadButton>,
     pub poll_count: u64,
     pub state_query_count: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InternalSaveMemoryKind {
+    SaveRam,
+    Rtc,
+}
+
+impl Default for InternalSaveMemoryKind {
+    fn default() -> Self {
+        Self::SaveRam
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalSaveMemoryInfo {
+    pub kind: InternalSaveMemoryKind,
+    pub size_bytes: usize,
+    pub file_path: Option<String>,
+    pub exists_on_disk: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalSaveOperationResult {
+    pub kind: InternalSaveMemoryKind,
+    pub size_bytes: usize,
+    pub file_path: String,
+    pub loaded: bool,
+    pub saved: bool,
+    pub message: String,
 }

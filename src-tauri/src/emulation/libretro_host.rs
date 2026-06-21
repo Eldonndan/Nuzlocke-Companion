@@ -1,6 +1,6 @@
 use std::ffi::CString;
 use std::fs;
-use std::os::raw::c_void;
+use std::os::raw::{c_uint, c_void};
 use std::path::Path;
 
 use libloading::Library;
@@ -9,8 +9,10 @@ use super::environment::{
     configure_environment, environment_info, reset_environment, LibretroEnvironmentConfig,
 };
 use super::libretro_ffi::{LibretroCoreSymbols, RetroGameInfo};
+use super::saves::{ensure_save_directory, save_file_path};
 use super::types::{
     InternalCoreInfo, InternalEnvironmentInfo, InternalFrameInfo, InternalLoadedGameInfo,
+    InternalSaveMemoryInfo, InternalSaveMemoryKind, InternalSaveOperationResult,
 };
 use super::video::{
     latest_frame_info, prepare_video_frame_capture, reset_video_state, take_video_error,
@@ -28,6 +30,7 @@ pub struct LibretroHost {
     core_info: InternalCoreInfo,
     initialized: bool,
     loaded_game: Option<LoadedGame>,
+    save_directory: Option<String>,
 }
 
 struct LoadedGame {
@@ -62,7 +65,7 @@ impl LibretroHost {
         configure_environment(LibretroEnvironmentConfig {
             core_path: core_path.clone(),
             rom_path: config.rom_path,
-            save_directory: config.save_directory,
+            save_directory: config.save_directory.clone(),
         });
 
         Ok(Self {
@@ -71,6 +74,7 @@ impl LibretroHost {
             core_info,
             initialized: false,
             loaded_game: None,
+            save_directory: config.save_directory,
         })
     }
 
@@ -160,6 +164,147 @@ impl LibretroHost {
 
     pub fn is_game_loaded(&self) -> bool {
         self.loaded_game.is_some()
+    }
+
+    pub fn save_memory_info(&self) -> Result<Vec<InternalSaveMemoryInfo>, String> {
+        self.ensure_content_ready_for_save_memory()?;
+
+        [InternalSaveMemoryKind::SaveRam, InternalSaveMemoryKind::Rtc]
+            .into_iter()
+            .filter_map(|kind| self.save_memory_info_for_kind(kind).transpose())
+            .collect()
+    }
+
+    pub fn save_memory_to_disk(
+        &mut self,
+        kind: InternalSaveMemoryKind,
+    ) -> Result<InternalSaveOperationResult, String> {
+        self.ensure_content_ready_for_save_memory()?;
+        let (data_pointer, size_bytes) = self.memory_pointer_and_size(kind)?;
+        let file_path = self.save_file_path(kind)?;
+        ensure_save_directory(&file_path)?;
+
+        // SAFETY: The core returned a non-null pointer and non-zero size for this
+        // memory kind. We copy the bytes immediately into an owned Vec and never
+        // store the core pointer.
+        let bytes = unsafe { std::slice::from_raw_parts(data_pointer as *const u8, size_bytes) }
+            .to_vec();
+        fs::write(&file_path, bytes)
+            .map_err(|error| format!("Unable to write save memory file: {error}"))?;
+
+        Ok(InternalSaveOperationResult {
+            kind,
+            size_bytes,
+            file_path: file_path.to_string_lossy().to_string(),
+            loaded: false,
+            saved: true,
+            message: "Memoria de guardado escrita en disco.".to_string(),
+        })
+    }
+
+    pub fn load_save_memory_from_disk(
+        &mut self,
+        kind: InternalSaveMemoryKind,
+    ) -> Result<InternalSaveOperationResult, String> {
+        self.ensure_content_ready_for_save_memory()?;
+        let (data_pointer, size_bytes) = self.memory_pointer_and_size(kind)?;
+        let file_path = self.save_file_path(kind)?;
+        let file_path_text = file_path.to_string_lossy().to_string();
+
+        if !file_path.exists() {
+            return Ok(InternalSaveOperationResult {
+                kind,
+                size_bytes,
+                file_path: file_path_text,
+                loaded: false,
+                saved: false,
+                message: "El archivo de guardado todavía no existe.".to_string(),
+            });
+        }
+
+        let bytes = fs::read(&file_path)
+            .map_err(|error| format!("Unable to read save memory file: {error}"))?;
+        if bytes.len() != size_bytes {
+            return Err(format!(
+                "Save memory file size mismatch: expected {size_bytes} bytes, got {} bytes.",
+                bytes.len()
+            ));
+        }
+
+        // SAFETY: The core returned a non-null pointer and size matching the file.
+        // We copy exactly `size_bytes` bytes into the core-owned save memory and do
+        // not keep the pointer after this operation.
+        let target = unsafe { std::slice::from_raw_parts_mut(data_pointer as *mut u8, size_bytes) };
+        target.copy_from_slice(&bytes);
+
+        Ok(InternalSaveOperationResult {
+            kind,
+            size_bytes,
+            file_path: file_path_text,
+            loaded: true,
+            saved: false,
+            message: "Memoria de guardado cargada desde disco.".to_string(),
+        })
+    }
+
+    fn ensure_content_ready_for_save_memory(&self) -> Result<(), String> {
+        if !self.initialized {
+            return Err("Libretro core must be initialized before accessing save memory.".into());
+        }
+
+        if !self.is_game_loaded() {
+            return Err("A ROM must be loaded before accessing save memory.".into());
+        }
+
+        Ok(())
+    }
+
+    fn save_memory_info_for_kind(
+        &self,
+        kind: InternalSaveMemoryKind,
+    ) -> Result<Option<InternalSaveMemoryInfo>, String> {
+        let size_bytes = self.symbols.memory_size(save_memory_id(kind));
+        if size_bytes == 0 {
+            return Ok(None);
+        }
+
+        let file_path = self.save_file_path(kind)?;
+        Ok(Some(InternalSaveMemoryInfo {
+            kind,
+            size_bytes,
+            exists_on_disk: file_path.exists(),
+            file_path: Some(file_path.to_string_lossy().to_string()),
+        }))
+    }
+
+    fn memory_pointer_and_size(
+        &self,
+        kind: InternalSaveMemoryKind,
+    ) -> Result<(*mut c_void, usize), String> {
+        let id = save_memory_id(kind);
+        let size_bytes = self.symbols.memory_size(id);
+        if size_bytes == 0 {
+            return Err(save_memory_unavailable_message(kind).to_string());
+        }
+
+        let data_pointer = self.symbols.memory_data(id);
+        if data_pointer.is_null() {
+            return Err("Libretro save memory pointer is null.".into());
+        }
+
+        Ok((data_pointer, size_bytes))
+    }
+
+    fn save_file_path(&self, kind: InternalSaveMemoryKind) -> Result<std::path::PathBuf, String> {
+        let loaded_game = self
+            .loaded_game
+            .as_ref()
+            .ok_or_else(|| "A ROM must be loaded before resolving save path.".to_string())?;
+        save_file_path(
+            self.save_directory.as_deref(),
+            &loaded_game.rom_path,
+            kind,
+        )
     }
 }
 
@@ -272,6 +417,20 @@ fn validate_extension(
         Err(format!(
             "ROM extension .{extension} is not supported by this core. Supported extensions: {valid_extensions}"
         ))
+    }
+}
+
+fn save_memory_id(kind: InternalSaveMemoryKind) -> c_uint {
+    match kind {
+        InternalSaveMemoryKind::SaveRam => 0,
+        InternalSaveMemoryKind::Rtc => 1,
+    }
+}
+
+fn save_memory_unavailable_message(kind: InternalSaveMemoryKind) -> &'static str {
+    match kind {
+        InternalSaveMemoryKind::SaveRam => "Save RAM is not available for this core/content.",
+        InternalSaveMemoryKind::Rtc => "RTC save memory is not available for this core/content.",
     }
 }
 
