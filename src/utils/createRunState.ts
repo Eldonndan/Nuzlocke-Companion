@@ -2,8 +2,16 @@ import {
   createBadgesFromGamePack,
   getGamePackByGameName,
 } from "../data/gamePacks";
-import type { Badge, PokemonSlot, RunState } from "../shared/types";
-import { normalizeLegacyExternalRuntimeConfig } from "./runtimeConfig";
+import type {
+  Badge,
+  PokemonSlot,
+  RunState,
+  RuntimeConfig,
+} from "../shared/types";
+import {
+  normalizeInternalLibretroRuntimeConfig,
+  normalizeLegacyExternalRuntimeConfig,
+} from "./runtimeConfig";
 
 export type CreateRunValues = {
   name: string;
@@ -13,6 +21,7 @@ export type CreateRunValues = {
   emulatorPath?: string;
   romPath?: string;
   launchArgs?: string[];
+  runtimeConfig?: RuntimeConfig;
   lives: number;
   routeName: string;
   levelCap: number;
@@ -28,11 +37,15 @@ export function createRunState(values: CreateRunValues): RunState {
     gamePackId: gamePack?.id,
     gameName: values.gameName,
     challengeType: values.challengeType,
-    runtimeConfig: normalizeLegacyExternalRuntimeConfig({
-      executablePath: values.emulatorPath ?? "",
-      romPath: values.romPath ?? "",
-      launchArgs: values.launchArgs ?? [],
-    }),
+    runtimeConfig: values.runtimeConfig
+      ? values.runtimeConfig.mode === "legacy-external"
+        ? normalizeLegacyExternalRuntimeConfig(values.runtimeConfig)
+        : normalizeInternalLibretroRuntimeConfig(values.runtimeConfig)
+      : normalizeLegacyExternalRuntimeConfig({
+          executablePath: values.emulatorPath ?? "",
+          romPath: values.romPath ?? "",
+          launchArgs: values.launchArgs ?? [],
+        }),
     lives: values.lives,
     levelCap: values.levelCap,
     currentRoute: {

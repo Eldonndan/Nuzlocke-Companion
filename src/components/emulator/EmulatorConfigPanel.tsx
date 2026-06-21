@@ -1,12 +1,46 @@
-import type { EmulatorConfig } from "../../shared/types";
+import type {
+  InternalLibretroRuntimeConfig,
+  LegacyExternalRuntimeConfig,
+  RuntimeConfig,
+} from "../../shared/types";
+import {
+  createDefaultInternalLibretroRuntimeConfig,
+  createDefaultLegacyExternalRuntimeConfig,
+  isInternalLibretroRuntime,
+  isLegacyExternalRuntime,
+  normalizeInternalLibretroRuntimeConfig,
+  normalizeLegacyExternalRuntimeConfig,
+} from "../../utils/runtimeConfig";
 
 type EmulatorConfigPanelProps = {
-  config: EmulatorConfig;
-  onChange: (config: EmulatorConfig) => void;
+  config: RuntimeConfig;
+  onChange: (config: RuntimeConfig) => void;
   onSelectEmulator: () => void;
   onSelectRom: () => void;
   onClose?: () => void;
 };
+
+function toLegacyConfig(config: RuntimeConfig): LegacyExternalRuntimeConfig {
+  if (isLegacyExternalRuntime(config)) {
+    return normalizeLegacyExternalRuntimeConfig(config);
+  }
+
+  return {
+    ...createDefaultLegacyExternalRuntimeConfig(),
+    romPath: config.romPath,
+  };
+}
+
+function toInternalConfig(config: RuntimeConfig): InternalLibretroRuntimeConfig {
+  if (isInternalLibretroRuntime(config)) {
+    return normalizeInternalLibretroRuntimeConfig(config);
+  }
+
+  return {
+    ...createDefaultInternalLibretroRuntimeConfig(),
+    romPath: config.romPath,
+  };
+}
 
 export function EmulatorConfigPanel({
   config,
@@ -15,16 +49,30 @@ export function EmulatorConfigPanel({
   onSelectRom,
   onClose,
 }: EmulatorConfigPanelProps) {
+  const isLegacyMode = isLegacyExternalRuntime(config);
+  const isInternalMode = isInternalLibretroRuntime(config);
+  const legacyConfig = toLegacyConfig(config);
+  const internalConfig = toInternalConfig(config);
   const shouldWarnEmulatorPath =
-    config.executablePath.trim().length > 0 &&
-    !config.executablePath.trim().toLowerCase().endsWith(".exe");
+    legacyConfig.executablePath.trim().length > 0 &&
+    !legacyConfig.executablePath.trim().toLowerCase().endsWith(".exe");
   const shouldWarnRomPath =
-    config.romPath.trim().length > 0 &&
-    !config.romPath.trim().toLowerCase().endsWith(".gba");
+    legacyConfig.romPath.trim().length > 0 &&
+    !legacyConfig.romPath.trim().toLowerCase().endsWith(".gba");
+
+  const updateLegacyConfig = (nextConfig: LegacyExternalRuntimeConfig) => {
+    onChange(normalizeLegacyExternalRuntimeConfig(nextConfig));
+  };
+
+  const updateInternalConfig = (
+    nextConfig: InternalLibretroRuntimeConfig,
+  ) => {
+    onChange(normalizeInternalLibretroRuntimeConfig(nextConfig));
+  };
 
   const updateLaunchArgs = (value: string) => {
-    onChange({
-      ...config,
+    updateLegacyConfig({
+      ...legacyConfig,
       launchArgs: value
         .split(" ")
         .map((arg) => arg.trim())
@@ -36,8 +84,10 @@ export function EmulatorConfigPanel({
     <aside className="emulator-panel" aria-labelledby="emulator-panel-title">
       <div className="emulator-panel__header">
         <div>
-          <p className="eyebrow">Emulador</p>
-          <h2 id="emulator-panel-title">mGBA</h2>
+          <p className="eyebrow">Runtime</p>
+          <h2 id="emulator-panel-title">
+            {isInternalMode ? "Libretro interno" : "mGBA externo"}
+          </h2>
         </div>
         {onClose ? (
           <button className="secondary-button" type="button" onClick={onClose}>
@@ -47,63 +97,177 @@ export function EmulatorConfigPanel({
       </div>
 
       <p className="emulator-panel__help">
-        Usa tu propio emulador y tu propia ROM. La app no incluye, descarga ni
-        modifica archivos de juego.
+        Usa tus propios archivos locales. La app no incluye, descarga ni
+        modifica ROMs, BIOS, cores ni archivos de juego.
       </p>
 
       <label className="form-field">
-        <span>Ruta del emulador</span>
-        <div className="path-field">
-          <input
-            type="text"
-            value={config.executablePath}
-            onChange={(event) =>
-              onChange({ ...config, executablePath: event.target.value })
-            }
-            placeholder="C:\\mGBA\\mGBA.exe"
-          />
-          <button className="secondary-button" type="button" onClick={onSelectEmulator}>
-            Buscar
-          </button>
-        </div>
-        {shouldWarnEmulatorPath ? (
-          <small className="form-warning">
-            La ruta del emulador debería apuntar a mGBA.exe.
-          </small>
-        ) : null}
+        <span>Modo de runtime</span>
+        <select
+          value={config.mode}
+          onChange={(event) => {
+            const nextMode = event.target.value as RuntimeConfig["mode"];
+            onChange(
+              nextMode === "legacy-external"
+                ? toLegacyConfig(config)
+                : toInternalConfig(config),
+            );
+          }}
+        >
+          <option value="legacy-external">Emulador externo legacy</option>
+          <option value="internal-libretro">Runtime interno Libretro</option>
+        </select>
       </label>
 
-      <label className="form-field">
-        <span>Ruta de la ROM</span>
-        <div className="path-field">
-          <input
-            type="text"
-            value={config.romPath}
-            onChange={(event) =>
-              onChange({ ...config, romPath: event.target.value })
-            }
-            placeholder="C:\\Juegos\\pokemon.gba"
-          />
-          <button className="secondary-button" type="button" onClick={onSelectRom}>
-            Buscar
-          </button>
-        </div>
-        {shouldWarnRomPath ? (
-          <small className="form-warning">
-            La ROM debería ser un archivo .gba.
-          </small>
-        ) : null}
-      </label>
+      {isLegacyMode ? (
+        <>
+          <label className="form-field">
+            <span>Ruta del emulador</span>
+            <div className="path-field">
+              <input
+                type="text"
+                value={legacyConfig.executablePath}
+                onChange={(event) =>
+                  updateLegacyConfig({
+                    ...legacyConfig,
+                    executablePath: event.target.value,
+                  })
+                }
+                placeholder="C:\\mGBA\\mGBA.exe"
+              />
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={onSelectEmulator}
+              >
+                Buscar
+              </button>
+            </div>
+            {shouldWarnEmulatorPath ? (
+              <small className="form-warning">
+                La ruta del emulador deberia apuntar a mGBA.exe.
+              </small>
+            ) : null}
+          </label>
 
-      <label className="form-field">
-        <span>Argumentos opcionales</span>
-        <input
-          type="text"
-          value={config.launchArgs?.join(" ") ?? ""}
-          onChange={(event) => updateLaunchArgs(event.target.value)}
-          placeholder="Opcional"
-        />
-      </label>
+          <label className="form-field">
+            <span>Ruta de la ROM</span>
+            <div className="path-field">
+              <input
+                type="text"
+                value={legacyConfig.romPath}
+                onChange={(event) =>
+                  updateLegacyConfig({
+                    ...legacyConfig,
+                    romPath: event.target.value,
+                  })
+                }
+                placeholder="C:\\Juegos\\pokemon.gba"
+              />
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={onSelectRom}
+              >
+                Buscar
+              </button>
+            </div>
+            {shouldWarnRomPath ? (
+              <small className="form-warning">
+                La ROM deberia ser un archivo .gba.
+              </small>
+            ) : null}
+          </label>
+
+          <label className="form-field">
+            <span>Argumentos opcionales</span>
+            <input
+              type="text"
+              value={legacyConfig.launchArgs?.join(" ") ?? ""}
+              onChange={(event) => updateLaunchArgs(event.target.value)}
+              placeholder="Opcional"
+            />
+          </label>
+        </>
+      ) : null}
+
+      {isInternalMode ? (
+        <>
+          <p className="emulator-panel__help">
+            Modo debug interno. Selecciona un core Libretro local, por ejemplo
+            mGBA, y usa una ROM propia. No incluyas ROMs ni cores en el repo.
+          </p>
+
+          <label className="form-field">
+            <span>Core</span>
+            <select
+              value={internalConfig.core}
+              onChange={(event) =>
+                updateInternalConfig({
+                  ...internalConfig,
+                  core: event.target.value as InternalLibretroRuntimeConfig["core"],
+                })
+              }
+            >
+              <option value="mgba">mGBA</option>
+            </select>
+          </label>
+
+          <label className="form-field">
+            <span>Ruta del core</span>
+            <input
+              type="text"
+              value={internalConfig.corePath}
+              onChange={(event) =>
+                updateInternalConfig({
+                  ...internalConfig,
+                  corePath: event.target.value,
+                })
+              }
+              placeholder="C:\\Libretro\\mgba_libretro.dll"
+            />
+            <small>
+              Ruta local al core Libretro. No se descarga ni valida desde este
+              panel.
+            </small>
+          </label>
+
+          <label className="form-field">
+            <span>Ruta de la ROM</span>
+            <input
+              type="text"
+              value={internalConfig.romPath}
+              onChange={(event) =>
+                updateInternalConfig({
+                  ...internalConfig,
+                  romPath: event.target.value,
+                })
+              }
+              placeholder="C:\\Juegos\\pokemon.gba"
+            />
+            <small>Ruta a una ROM propia del usuario.</small>
+          </label>
+
+          <label className="form-field">
+            <span>Directorio de guardado opcional</span>
+            <input
+              type="text"
+              value={internalConfig.saveDirectory ?? ""}
+              onChange={(event) =>
+                updateInternalConfig({
+                  ...internalConfig,
+                  saveDirectory: event.target.value || undefined,
+                })
+              }
+              placeholder="C:\\Juegos\\saves"
+            />
+            <small>
+              Si queda vacio, el runtime usara el directorio de la ROM cuando
+              corresponda.
+            </small>
+          </label>
+        </>
+      ) : null}
     </aside>
   );
 }

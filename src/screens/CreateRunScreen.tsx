@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { EmulatorConfigPanel } from "../components/emulator/EmulatorConfigPanel";
 import { gamePacks, getGamePackByGameName } from "../data/gamePacks";
-import type { EmulatorConfig, RunState } from "../shared/types";
+import type { RunState, RuntimeConfig } from "../shared/types";
 import {
   selectEmulatorExecutable,
   selectRomFile,
 } from "../utils/emulatorCommands";
 import { createRunState } from "../utils/createRunState";
 import { hasSavedRun } from "../utils/runStorage";
+import { isLegacyExternalRuntime } from "../utils/runtimeConfig";
 
 type CreateRunScreenProps = {
   onBack: () => void;
@@ -47,7 +48,7 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
   const [levelCap, setLevelCap] = useState(
     defaultPack?.defaultInitialLevelCap ?? 5,
   );
-  const [emulatorConfig, setEmulatorConfig] = useState<EmulatorConfig>({
+  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>({
     mode: "legacy-external",
     emulatorType: "mgba",
     executablePath: "",
@@ -60,10 +61,14 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
     try {
       const selectedPath = await selectEmulatorExecutable();
       if (selectedPath) {
-        setEmulatorConfig((currentConfig) => ({
-          ...currentConfig,
-          executablePath: selectedPath,
-        }));
+        setRuntimeConfig((currentConfig) =>
+          isLegacyExternalRuntime(currentConfig)
+            ? {
+                ...currentConfig,
+                executablePath: selectedPath,
+              }
+            : currentConfig,
+        );
       }
     } catch {
       setError("No se pudo abrir el selector del emulador.");
@@ -74,10 +79,14 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
     try {
       const selectedPath = await selectRomFile();
       if (selectedPath) {
-        setEmulatorConfig((currentConfig) => ({
-          ...currentConfig,
-          romPath: selectedPath,
-        }));
+        setRuntimeConfig((currentConfig) =>
+          isLegacyExternalRuntime(currentConfig)
+            ? {
+                ...currentConfig,
+                romPath: selectedPath,
+              }
+            : currentConfig,
+        );
       }
     } catch {
       setError("No se pudo abrir el selector de ROM.");
@@ -133,9 +142,7 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
         platform,
         gameName,
         challengeType,
-        emulatorPath: emulatorConfig.executablePath,
-        romPath: emulatorConfig.romPath,
-        launchArgs: emulatorConfig.launchArgs,
+        runtimeConfig,
         lives,
         routeName,
         levelCap,
@@ -257,8 +264,8 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
         </div>
 
         <EmulatorConfigPanel
-          config={emulatorConfig}
-          onChange={setEmulatorConfig}
+          config={runtimeConfig}
+          onChange={setRuntimeConfig}
           onSelectEmulator={chooseEmulator}
           onSelectRom={chooseRom}
         />

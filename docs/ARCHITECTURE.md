@@ -311,6 +311,14 @@ The internal preview includes a frontend-only debug render loop:
 
 This is intentionally not the final gameplay loop. It still moves full RGBA snapshots through explicit invokes, does not stream frame events, does not use efficient GPU transport, does not implement audio, and does not change `internal_runtime_start`, pause, or resume.
 
+### Runtime Configuration UI
+
+The emulator/runtime configuration panel now lets a run choose between `legacy-external` and `internal-libretro`.
+
+Legacy external mode keeps the existing mGBA executable, ROM path, and launch arguments fields. Internal Libretro mode exposes the target core, local Libretro core path, local user ROM path, and optional save directory. The app does not download, bundle, or validate cores, ROMs, or BIOS files from this panel; Rust validates paths when the debug runtime commands are executed.
+
+The selected configuration is stored in `RunState.runtimeConfig`. Deprecated `RunState.emulatorConfig` remains only for old local-save compatibility. The internal mode UI is still a debug flow and does not implement final start/pause/resume, audio, autosave, or packaged emulator assets.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

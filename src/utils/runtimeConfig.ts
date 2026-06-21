@@ -28,6 +28,20 @@ export function createDefaultInternalLibretroRuntimeConfig(): InternalLibretroRu
   };
 }
 
+export function normalizeInternalLibretroRuntimeConfig(
+  config: Partial<InternalLibretroRuntimeConfig> | undefined,
+): InternalLibretroRuntimeConfig {
+  return {
+    ...createDefaultInternalLibretroRuntimeConfig(),
+    ...config,
+    mode: "internal-libretro",
+    core: "mgba",
+    saveDirectory: config?.saveDirectory?.trim()
+      ? config.saveDirectory
+      : undefined,
+  };
+}
+
 export function isLegacyExternalRuntime(
   config: RuntimeConfig | undefined,
 ): config is LegacyExternalRuntimeConfig {
@@ -56,7 +70,7 @@ export function getRunRuntimeConfig(run: RunState): RuntimeConfig {
   if (run.runtimeConfig) {
     return run.runtimeConfig.mode === "legacy-external"
       ? normalizeLegacyExternalRuntimeConfig(run.runtimeConfig)
-      : run.runtimeConfig;
+      : normalizeInternalLibretroRuntimeConfig(run.runtimeConfig);
   }
 
   if (run.emulatorConfig) {
@@ -82,7 +96,7 @@ export function withRunRuntimeConfig(
 
   return {
     ...run,
-    runtimeConfig,
+    runtimeConfig: normalizeInternalLibretroRuntimeConfig(runtimeConfig),
     emulatorConfig: undefined,
   };
 }

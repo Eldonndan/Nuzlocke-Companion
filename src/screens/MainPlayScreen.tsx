@@ -17,8 +17,8 @@ import type {
   CaptureStatus,
   CaptureWindow,
   DockedWindowInfo,
-  EmulatorConfig,
   HostRect,
+  RuntimeConfig,
   LiveCaptureFrame,
   OverlayAction,
   PokemonSlot,
@@ -190,6 +190,9 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const hasEmulatorConfigured = isLegacyRuntime && Boolean(
     emulatorConfig.executablePath && emulatorConfig.romPath,
   );
+  const hasInternalRuntimeConfigured = isInternalRuntime && Boolean(
+    runtimeConfig.corePath && runtimeConfig.romPath,
+  );
 
   const ensureLegacyExternalRuntime = () => {
     if (isLegacyRuntime) {
@@ -356,7 +359,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     }));
   };
 
-  const updateEmulatorConfig = (config: EmulatorConfig) => {
+  const updateRuntimeConfig = (config: RuntimeConfig) => {
     void stopNativeCapture("Captura detenida");
     void hideOverlay();
     void undockCurrentGame();
@@ -936,7 +939,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     try {
       const selectedPath = await selectEmulatorExecutable();
       if (selectedPath) {
-        updateEmulatorConfig({
+        updateRuntimeConfig({
           ...emulatorConfig,
           executablePath: selectedPath,
         });
@@ -954,7 +957,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     try {
       const selectedPath = await selectRomFile();
       if (selectedPath) {
-        updateEmulatorConfig({
+        updateRuntimeConfig({
           ...emulatorConfig,
           romPath: selectedPath,
         });
@@ -1124,17 +1127,31 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
         </div>
 
         <div className="play-topbar__actions">
-          <button
-            className={hasEmulatorConfigured ? "primary-button" : "secondary-button"}
-            type="button"
-            onClick={
-              hasEmulatorConfigured
-                ? startDockedSession
-                : () => setIsEmulatorPanelOpen(true)
-            }
-          >
-            {hasEmulatorConfigured ? "Jugar en modo acoplado" : "Configurar emulador"}
-          </button>
+          {isInternalRuntime ? (
+            <button
+              className={
+                hasInternalRuntimeConfigured ? "primary-button" : "secondary-button"
+              }
+              type="button"
+              onClick={() => setIsEmulatorPanelOpen(true)}
+            >
+              {hasInternalRuntimeConfigured
+                ? "Runtime interno configurado"
+                : "Configurar runtime interno"}
+            </button>
+          ) : (
+            <button
+              className={hasEmulatorConfigured ? "primary-button" : "secondary-button"}
+              type="button"
+              onClick={
+                hasEmulatorConfigured
+                  ? startDockedSession
+                  : () => setIsEmulatorPanelOpen(true)
+              }
+            >
+              {hasEmulatorConfigured ? "Jugar en modo acoplado" : "Configurar emulador"}
+            </button>
+          )}
           <button
             className="secondary-button"
             type="button"
@@ -1248,14 +1265,29 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       </section>
 
       <div className="emulator-status" aria-live="polite">
-        <span>
-          {emulatorConfig.executablePath
-            ? "Emulador configurado"
-            : "Configura el emulador para jugar"}
-        </span>
-        <span>{emulatorConfig.romPath ? "ROM configurada" : "sin ROM"}</span>
-        <span>Ventana de juego: {windowStatus}</span>
-        <span>Overlay: {overlayStatus}</span>
+        {isInternalRuntime ? (
+          <>
+            <span>Runtime interno Libretro</span>
+            <span>{runtimeConfig.corePath ? "Core configurado" : "sin core"}</span>
+            <span>{runtimeConfig.romPath ? "ROM configurada" : "sin ROM"}</span>
+            <span>
+              {runtimeConfig.saveDirectory
+                ? "Directorio de guardado configurado"
+                : "sin directorio de guardado"}
+            </span>
+          </>
+        ) : (
+          <>
+            <span>
+              {emulatorConfig.executablePath
+                ? "Emulador configurado"
+                : "Configura el emulador para jugar"}
+            </span>
+            <span>{emulatorConfig.romPath ? "ROM configurada" : "sin ROM"}</span>
+            <span>Ventana de juego: {windowStatus}</span>
+            <span>Overlay: {overlayStatus}</span>
+          </>
+        )}
         {isCaptureSessionRunning ? (
           <strong>{frameStatus || `Modo captura experimental a ${captureFps} FPS`}</strong>
         ) : null}
@@ -1292,8 +1324,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
 
       {isEmulatorPanelOpen ? (
         <EmulatorConfigPanel
-          config={emulatorConfig}
-          onChange={updateEmulatorConfig}
+          config={runtimeConfig}
+          onChange={updateRuntimeConfig}
           onClose={() => setIsEmulatorPanelOpen(false)}
           onSelectEmulator={chooseEmulator}
           onSelectRom={chooseRom}

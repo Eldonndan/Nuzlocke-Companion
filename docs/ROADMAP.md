@@ -94,6 +94,7 @@ Status:
 - Added manual internal runtime setup controls so prepare, core load, init, ROM load, SRAM actions, frame stepping, bounded batches, and snapshot rendering can be smoke-tested from the UI.
 - Added scoped keyboard debug input on the internal preview card, using existing Joypad commands without global listeners, rebinding, or physical gamepad support.
 - Added a frontend-only debug render loop that repeats small bounded batches and redraws RGBA snapshots until cancelled.
+- Added runtime configuration UI for choosing legacy external mode or internal Libretro mode with local core, ROM, and save-directory paths.
 - Final continuous gameplay loop, efficient frame transport, physical input, real audio pipelines, autosave, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline
