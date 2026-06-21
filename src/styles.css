@@ -308,6 +308,15 @@ h3 {
   padding: 12px;
 }
 
+.internal-frame-preview:focus-visible {
+  outline: 2px solid rgba(133, 216, 255, 0.9);
+  outline-offset: 3px;
+}
+
+.internal-frame-preview--keyboard-focused {
+  border-color: rgba(133, 216, 255, 0.46);
+}
+
 .internal-frame-preview__header {
   display: flex;
   flex-wrap: wrap;
@@ -373,7 +382,8 @@ h3 {
 }
 
 .internal-frame-preview__runtime,
-.internal-frame-preview__setup {
+.internal-frame-preview__setup,
+.internal-frame-preview__keyboard {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -385,7 +395,9 @@ h3 {
 
 .internal-frame-preview__runtime > strong,
 .internal-frame-preview__runtime > span,
-.internal-frame-preview__setup > strong {
+.internal-frame-preview__setup > strong,
+.internal-frame-preview__keyboard > strong,
+.internal-frame-preview__keyboard > span {
   max-width: 100%;
   overflow-wrap: anywhere;
   border-radius: 999px;
@@ -394,7 +406,8 @@ h3 {
 }
 
 .internal-frame-preview__runtime > strong,
-.internal-frame-preview__setup > strong {
+.internal-frame-preview__setup > strong,
+.internal-frame-preview__keyboard > strong {
   color: #bdf7dc;
 }
 

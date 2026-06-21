@@ -288,6 +288,18 @@ The internal debug preview now accepts the run's `InternalLibretroRuntimeConfig`
 
 This is a developer/debug flow, not the final player-facing emulator workflow. It does not implement `internal_runtime_start`, pause/resume, autoplay, autosave, audio output, keyboard capture, physical gamepad input, or automatic frame streaming.
 
+### Scoped Keyboard Debug Input
+
+The internal debug preview can now accept local keyboard input when its preview card has focus:
+
+- Arrow keys map to the Libretro Joypad D-pad.
+- Z/X map to A/B.
+- Enter/Backspace map to Start/Select.
+- A/S map to L/R.
+- Q/W map to Y/X.
+
+The implementation uses the existing Joypad Tauri commands and React `onKeyDown` / `onKeyUp` handlers on the focusable preview element. It does not install `window` or `document` listeners, does not capture keyboard globally, releases keyboard-held buttons on blur, and does not implement rebinding, Gamepad API support, or the final player input system.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

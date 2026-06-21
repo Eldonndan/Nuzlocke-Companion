@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { type FocusEvent, type KeyboardEvent, useRef, useState } from "react";
 import type { InternalLibretroRuntimeConfig } from "../../shared/types";
 import {
   getInternalRuntimeStatus,
@@ -44,6 +44,21 @@ const joypadButtons: Array<{ button: InternalJoypadButton; label: string }> = [
   { button: "y", label: "Y" },
 ];
 
+const keyboardJoypadMap: Record<string, InternalJoypadButton> = {
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right",
+  KeyZ: "a",
+  KeyX: "b",
+  Enter: "start",
+  Backspace: "select",
+  KeyA: "l",
+  KeyS: "r",
+  KeyQ: "y",
+  KeyW: "x",
+};
+
 function getJoypadButtonLabel(button: InternalJoypadButton) {
   return (
     joypadButtons.find((candidate) => candidate.button === button)?.label ??
@@ -72,10 +87,22 @@ function formatPath(value: string | undefined) {
   return trimmedValue ? trimmedValue : "sin configurar";
 }
 
+function isEditableTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
+}
+
 export function InternalRuntimeFramePreview({
   runtimeConfig,
 }: InternalRuntimeFramePreviewProps) {
+  const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const heldKeyboardKeysRef = useRef(new Set<string>());
+  const heldKeyboardButtonsRef = useRef(new Set<InternalJoypadButton>());
   const [snapshot, setSnapshot] = useState<InternalFrameSnapshot | null>(null);
   const [runtimeStatus, setRuntimeStatus] =
     useState<InternalRuntimeStatus | null>(null);
@@ -85,6 +112,7 @@ export function InternalRuntimeFramePreview({
     useState<InternalSaveOperationResult | null>(null);
   const [status, setStatus] = useState<PreviewStatus>("idle");
   const [message, setMessage] = useState("Sin fotograma renderizado.");
+  const [isKeyboardFocused, setIsKeyboardFocused] = useState(false);
 
   const trimmedCore = runtimeConfig.core.trim();
   const trimmedCorePath = runtimeConfig.corePath.trim();
@@ -383,8 +411,93 @@ export function InternalRuntimeFramePreview({
     }
   };
 
+  const setKeyboardButton = async (
+    button: InternalJoypadButton,
+    pressed: boolean,
+  ) => {
+    try {
+      applyRuntimeStatus(
+        await setInternalRuntimeJoypadButton({
+          button,
+          pressed,
+        }),
+      );
+    } catch (error) {
+      setStatus("error");
+      setMessage(getErrorMessage(error));
+    }
+  };
+
+  const handleKeyboardKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const button = keyboardJoypadMap[event.code];
+
+    if (!button || isEditableTarget(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.repeat || heldKeyboardKeysRef.current.has(event.code)) {
+      return;
+    }
+
+    heldKeyboardKeysRef.current.add(event.code);
+    heldKeyboardButtonsRef.current.add(button);
+    void setKeyboardButton(button, true);
+  };
+
+  const handleKeyboardKeyUp = (event: KeyboardEvent<HTMLElement>) => {
+    const button = keyboardJoypadMap[event.code];
+
+    if (!button || isEditableTarget(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+    heldKeyboardKeysRef.current.delete(event.code);
+    heldKeyboardButtonsRef.current.delete(button);
+    void setKeyboardButton(button, false);
+  };
+
+  const releaseHeldKeyboardButtons = async () => {
+    const buttonsToRelease = [...heldKeyboardButtonsRef.current];
+    heldKeyboardKeysRef.current.clear();
+    heldKeyboardButtonsRef.current.clear();
+
+    for (const button of buttonsToRelease) {
+      await setKeyboardButton(button, false);
+    }
+  };
+
+  const handleKeyboardBlur = (event: FocusEvent<HTMLElement>) => {
+    const nextTarget = event.relatedTarget;
+
+    if (
+      nextTarget instanceof Node &&
+      sectionRef.current?.contains(nextTarget)
+    ) {
+      return;
+    }
+
+    setIsKeyboardFocused(false);
+    void releaseHeldKeyboardButtons();
+  };
+
   return (
-    <section className="internal-frame-preview" aria-label="Vista previa interna">
+    <section
+      ref={sectionRef}
+      className={
+        isKeyboardFocused
+          ? "internal-frame-preview internal-frame-preview--keyboard-focused"
+          : "internal-frame-preview"
+      }
+      aria-label="Vista previa interna"
+      tabIndex={0}
+      onFocus={() => setIsKeyboardFocused(true)}
+      onBlur={handleKeyboardBlur}
+      onKeyDown={handleKeyboardKeyDown}
+      onKeyUp={handleKeyboardKeyUp}
+    >
       <div className="internal-frame-preview__header">
         <div>
           <p className="eyebrow">Runtime interno</p>
@@ -587,6 +700,25 @@ export function InternalRuntimeFramePreview({
           {`Sondeos: ${inputInfo?.pollCount ?? 0} - Consultas: ${
             inputInfo?.stateQueryCount ?? 0
           }`}
+        </span>
+      </div>
+      <div className="internal-frame-preview__keyboard">
+        <strong>Teclado local</strong>
+        <span>Haz click en esta tarjeta para activar teclado.</span>
+        <span>{isKeyboardFocused ? "Teclado activo" : "Teclado inactivo"}</span>
+        <span>Flechas = D-pad</span>
+        <span>Z = A</span>
+        <span>X = B</span>
+        <span>Enter = Start</span>
+        <span>Backspace = Select</span>
+        <span>A/S = L/R</span>
+        <span>Q/W = Y/X</span>
+        <span>
+          {heldKeyboardButtonsRef.current.size
+            ? `Teclado: ${[...heldKeyboardButtonsRef.current]
+                .map(getJoypadButtonLabel)
+                .join(", ")}`
+            : "Sin botones retenidos por teclado"}
         </span>
       </div>
       <div className="internal-frame-preview__saves">
