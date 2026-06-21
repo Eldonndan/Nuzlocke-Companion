@@ -372,6 +372,38 @@ h3 {
   color: #bdf7dc;
 }
 
+.internal-frame-preview__runtime,
+.internal-frame-preview__setup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #c6ddf5;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.internal-frame-preview__runtime > strong,
+.internal-frame-preview__runtime > span,
+.internal-frame-preview__setup > strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 5px 9px;
+}
+
+.internal-frame-preview__runtime > strong,
+.internal-frame-preview__setup > strong {
+  color: #bdf7dc;
+}
+
+.internal-frame-preview__setup-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .internal-frame-preview__input {
   display: flex;
   flex-wrap: wrap;

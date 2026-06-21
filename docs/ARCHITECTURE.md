@@ -277,6 +277,17 @@ The internal runtime now supports manual Libretro save memory persistence:
 
 This does not implement save states, `retro_serialize`, `retro_unserialize`, autosave, bundled ROM data, or bundled cores.
 
+### Internal Runtime Debug Lifecycle Controls
+
+The internal debug preview now accepts the run's `InternalLibretroRuntimeConfig` and exposes manual lifecycle controls for smoke testing:
+
+- Prepare runtime from the configured core, core path, ROM path, and optional save directory.
+- Load and initialize the Libretro core.
+- Load the configured ROM.
+- Refresh save memory, load SRAM, save SRAM, step one frame, run a bounded 60-frame batch, render the latest snapshot, and send manual Joypad input.
+
+This is a developer/debug flow, not the final player-facing emulator workflow. It does not implement `internal_runtime_start`, pause/resume, autoplay, autosave, audio output, keyboard capture, physical gamepad input, or automatic frame streaming.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

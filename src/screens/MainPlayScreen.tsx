@@ -56,6 +56,7 @@ import {
 import {
   createDefaultLegacyExternalRuntimeConfig,
   getRunRuntimeConfig,
+  isInternalLibretroRuntime,
   isLegacyExternalRuntime,
   withRunRuntimeConfig,
 } from "../utils/runtimeConfig";
@@ -182,6 +183,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     editingSlotIndex === null ? null : runState.team[editingSlotIndex];
   const runtimeConfig = getRunRuntimeConfig(runState);
   const isLegacyRuntime = isLegacyExternalRuntime(runtimeConfig);
+  const isInternalRuntime = isInternalLibretroRuntime(runtimeConfig);
   const emulatorConfig = isLegacyRuntime
     ? runtimeConfig
     : createDefaultLegacyExternalRuntimeConfig();
@@ -1228,8 +1230,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
         <span>Haz click en los paneles para editar la run.</span>
       </section>
 
-      {!isLegacyRuntime ? (
-        <InternalRuntimeFramePreview />
+      {isInternalRuntime ? (
+        <InternalRuntimeFramePreview runtimeConfig={runtimeConfig} />
       ) : null}
 
       <section className="play-layout" aria-label="Diseño principal">

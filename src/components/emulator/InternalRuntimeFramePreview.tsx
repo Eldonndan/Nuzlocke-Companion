@@ -1,21 +1,33 @@
 import { useRef, useState } from "react";
+import type { InternalLibretroRuntimeConfig } from "../../shared/types";
 import {
+  getInternalRuntimeStatus,
   getLatestInternalRuntimeFrameSnapshot,
+  initInternalRuntimeCore,
+  loadInternalRuntimeCore,
+  loadInternalRuntimeGame,
+  loadInternalRuntimeSaveMemoryFromDisk,
+  prepareInternalRuntime,
+  refreshInternalRuntimeSaveMemoryInfo,
   runInternalRuntimeFrameLoop,
+  saveInternalRuntimeMemoryToDisk,
   stepInternalRuntimeFrame,
   clearInternalRuntimeJoypadButtons,
-  loadInternalRuntimeSaveMemoryFromDisk,
-  refreshInternalRuntimeSaveMemoryInfo,
-  saveInternalRuntimeMemoryToDisk,
   setInternalRuntimeJoypadButton,
-  type InternalJoypadButton,
   type InternalFrameSnapshot,
   type InternalInputInfo,
+  type InternalJoypadButton,
+  type InternalRuntimeStatus,
   type InternalSaveMemoryInfo,
   type InternalSaveOperationResult,
+  type PrepareInternalRuntimeRequest,
 } from "../../utils/internalRuntimeCommands";
 
 type PreviewStatus = "idle" | "loading" | "ready" | "empty" | "error";
+
+type InternalRuntimeFramePreviewProps = {
+  runtimeConfig: InternalLibretroRuntimeConfig;
+};
 
 const joypadButtons: Array<{ button: InternalJoypadButton; label: string }> = [
   { button: "up", label: "Arriba" },
@@ -51,9 +63,22 @@ function getErrorMessage(error: unknown) {
   return "No se pudo actualizar la vista previa.";
 }
 
-export function InternalRuntimeFramePreview() {
+function formatFlag(value: boolean | undefined) {
+  return value ? "si" : "no";
+}
+
+function formatPath(value: string | undefined) {
+  const trimmedValue = value?.trim();
+  return trimmedValue ? trimmedValue : "sin configurar";
+}
+
+export function InternalRuntimeFramePreview({
+  runtimeConfig,
+}: InternalRuntimeFramePreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [snapshot, setSnapshot] = useState<InternalFrameSnapshot | null>(null);
+  const [runtimeStatus, setRuntimeStatus] =
+    useState<InternalRuntimeStatus | null>(null);
   const [inputInfo, setInputInfo] = useState<InternalInputInfo | null>(null);
   const [saveMemory, setSaveMemory] = useState<InternalSaveMemoryInfo[]>([]);
   const [lastSaveOperation, setLastSaveOperation] =
@@ -61,14 +86,76 @@ export function InternalRuntimeFramePreview() {
   const [status, setStatus] = useState<PreviewStatus>("idle");
   const [message, setMessage] = useState("Sin fotograma renderizado.");
 
+  const trimmedCore = runtimeConfig.core.trim();
+  const trimmedCorePath = runtimeConfig.corePath.trim();
+  const trimmedRomPath = runtimeConfig.romPath.trim();
+  const trimmedSaveDirectory = runtimeConfig.saveDirectory?.trim();
+  const hasPrepareConfig = Boolean(
+    trimmedCore && trimmedCorePath && trimmedRomPath,
+  );
   const pressedButtons = new Set(inputInfo?.pressedButtons ?? []);
   const saveRamInfo = saveMemory.find((memory) => memory.kind === "save-ram");
+
+  const applyRuntimeStatus = (nextStatus: InternalRuntimeStatus) => {
+    setRuntimeStatus(nextStatus);
+    setInputInfo(nextStatus.inputInfo);
+    setSaveMemory(nextStatus.saveMemory);
+    setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
+  };
+
+  const buildPrepareRequest = (): PrepareInternalRuntimeRequest | null => {
+    if (!trimmedCore) {
+      setStatus("error");
+      setMessage("Falta configurar core.");
+      return null;
+    }
+
+    if (!trimmedCorePath) {
+      setStatus("error");
+      setMessage("Falta configurar corePath.");
+      return null;
+    }
+
+    if (!trimmedRomPath) {
+      setStatus("error");
+      setMessage("Falta configurar romPath.");
+      return null;
+    }
+
+    return {
+      core: trimmedCore,
+      corePath: trimmedCorePath,
+      romPath: trimmedRomPath,
+      saveDirectory: trimmedSaveDirectory || undefined,
+    };
+  };
+
+  const runRuntimeAction = async (
+    loadingMessage: string,
+    action: () => Promise<InternalRuntimeStatus>,
+    readyMessage: string,
+  ) => {
+    setStatus("loading");
+    setMessage(loadingMessage);
+
+    try {
+      const nextStatus = await action();
+      applyRuntimeStatus(nextStatus);
+      setStatus("ready");
+      setMessage(readyMessage);
+      return nextStatus;
+    } catch (error) {
+      setStatus("error");
+      setMessage(getErrorMessage(error));
+      return null;
+    }
+  };
 
   const renderSnapshot = (nextSnapshot: InternalFrameSnapshot | null) => {
     if (!nextSnapshot) {
       setSnapshot(null);
       setStatus("empty");
-      setMessage("No hay fotograma disponible todavía.");
+      setMessage("No hay fotograma disponible todavia.");
       return;
     }
 
@@ -86,7 +173,7 @@ export function InternalRuntimeFramePreview() {
 
     if (rgba.length !== expectedLength) {
       setStatus("error");
-      setMessage("El fotograma RGBA tiene un tamaño inesperado.");
+      setMessage("El fotograma RGBA tiene un tamano inesperado.");
       return;
     }
 
@@ -102,9 +189,106 @@ export function InternalRuntimeFramePreview() {
     setMessage("Frame renderizado.");
   };
 
+  const readRuntimeStatus = async () => {
+    await runRuntimeAction(
+      "Leyendo estado del runtime...",
+      getInternalRuntimeStatus,
+      "Estado actualizado.",
+    );
+  };
+
+  const prepareRuntime = async () => {
+    const request = buildPrepareRequest();
+
+    if (!request) {
+      return null;
+    }
+
+    return runRuntimeAction(
+      "Preparando runtime...",
+      () => prepareInternalRuntime(request),
+      "Runtime preparado.",
+    );
+  };
+
+  const loadCore = async () =>
+    runRuntimeAction("Cargando core...", loadInternalRuntimeCore, "Core cargado.");
+
+  const initCore = async () =>
+    runRuntimeAction(
+      "Inicializando core...",
+      initInternalRuntimeCore,
+      "Core inicializado.",
+    );
+
+  const loadGame = async () =>
+    runRuntimeAction("Cargando ROM...", loadInternalRuntimeGame, "ROM cargada.");
+
+  const prepareLoadCoreInitLoadRom = async () => {
+    const request = buildPrepareRequest();
+
+    if (!request) {
+      return;
+    }
+
+    setStatus("loading");
+    setMessage("Preparando runtime interno...");
+
+    try {
+      applyRuntimeStatus(await prepareInternalRuntime(request));
+      setMessage("Cargando core...");
+      applyRuntimeStatus(await loadInternalRuntimeCore());
+      setMessage("Inicializando core...");
+      applyRuntimeStatus(await initInternalRuntimeCore());
+      setMessage("Cargando ROM...");
+      applyRuntimeStatus(await loadInternalRuntimeGame());
+      setMessage("Actualizando memoria de guardado...");
+      applyRuntimeStatus(await refreshInternalRuntimeSaveMemoryInfo());
+      setStatus("ready");
+      setMessage("Runtime interno listo para pruebas.");
+    } catch (error) {
+      setStatus("error");
+      setMessage(getErrorMessage(error));
+    }
+  };
+
+  const prepareLoadCoreInitLoadRomAndSram = async () => {
+    const request = buildPrepareRequest();
+
+    if (!request) {
+      return;
+    }
+
+    setStatus("loading");
+    setMessage("Preparando runtime interno...");
+
+    try {
+      applyRuntimeStatus(await prepareInternalRuntime(request));
+      setMessage("Cargando core...");
+      applyRuntimeStatus(await loadInternalRuntimeCore());
+      setMessage("Inicializando core...");
+      applyRuntimeStatus(await initInternalRuntimeCore());
+      setMessage("Cargando ROM...");
+      applyRuntimeStatus(await loadInternalRuntimeGame());
+      setMessage("Actualizando memoria de guardado...");
+      applyRuntimeStatus(await refreshInternalRuntimeSaveMemoryInfo());
+      setMessage("Cargando SRAM...");
+      const nextStatus = await loadInternalRuntimeSaveMemoryFromDisk("save-ram");
+      applyRuntimeStatus(nextStatus);
+      setStatus("ready");
+      setMessage(
+        nextStatus.lastSaveOperation?.message ??
+          "Runtime interno listo con SRAM consultada.",
+      );
+    } catch (error) {
+      setStatus("error");
+      setMessage(getErrorMessage(error));
+    }
+  };
+
   const refreshSnapshot = async () => {
     setStatus("loading");
-    setMessage("Renderizando último fotograma...");
+    setMessage("Renderizando ultimo fotograma...");
 
     try {
       renderSnapshot(await getLatestInternalRuntimeFrameSnapshot());
@@ -115,123 +299,87 @@ export function InternalRuntimeFramePreview() {
   };
 
   const stepAndRender = async () => {
-    setStatus("loading");
-    setMessage("Ejecutando un fotograma...");
+    const nextStatus = await runRuntimeAction(
+      "Ejecutando un fotograma...",
+      stepInternalRuntimeFrame,
+      "Fotograma ejecutado.",
+    );
 
-    try {
-      const nextStatus = await stepInternalRuntimeFrame();
-      setInputInfo(nextStatus.inputInfo);
-      setSaveMemory(nextStatus.saveMemory);
-      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
-      renderSnapshot(await getLatestInternalRuntimeFrameSnapshot());
-    } catch (error) {
-      setStatus("error");
-      setMessage(getErrorMessage(error));
+    if (!nextStatus) {
+      return;
     }
+
+    await refreshSnapshot();
   };
 
   const runBatchAndRender = async () => {
-    setStatus("loading");
-    setMessage("Ejecutando 60 fotogramas...");
+    const nextStatus = await runRuntimeAction(
+      "Ejecutando 60 fotogramas...",
+      () =>
+        runInternalRuntimeFrameLoop({
+          maxFrames: 60,
+          targetFps: 60,
+        }),
+      "Batch ejecutado.",
+    );
 
-    try {
-      const nextStatus = await runInternalRuntimeFrameLoop({
-        maxFrames: 60,
-        targetFps: 60,
-      });
-      setInputInfo(nextStatus.inputInfo);
-      setSaveMemory(nextStatus.saveMemory);
-      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
-      renderSnapshot(await getLatestInternalRuntimeFrameSnapshot());
-    } catch (error) {
-      setStatus("error");
-      setMessage(getErrorMessage(error));
+    if (!nextStatus) {
+      return;
     }
+
+    await refreshSnapshot();
   };
 
   const toggleJoypadButton = async (button: InternalJoypadButton) => {
     const pressed = !pressedButtons.has(button);
-    setStatus("loading");
-    setMessage(pressed ? "Presionando botón..." : "Soltando botón...");
-
-    try {
-      const nextStatus = await setInternalRuntimeJoypadButton({
-        button,
-        pressed,
-      });
-      setInputInfo(nextStatus.inputInfo);
-      setSaveMemory(nextStatus.saveMemory);
-      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
-      setStatus("ready");
-      setMessage(pressed ? "Botón presionado." : "Botón soltado.");
-    } catch (error) {
-      setStatus("error");
-      setMessage(getErrorMessage(error));
-    }
+    await runRuntimeAction(
+      pressed ? "Presionando boton..." : "Soltando boton...",
+      () =>
+        setInternalRuntimeJoypadButton({
+          button,
+          pressed,
+        }),
+      pressed ? "Boton presionado." : "Boton soltado.",
+    );
   };
 
   const clearJoypadButtons = async () => {
-    setStatus("loading");
-    setMessage("Limpiando botones...");
-
-    try {
-      const nextStatus = await clearInternalRuntimeJoypadButtons();
-      setInputInfo(nextStatus.inputInfo);
-      setSaveMemory(nextStatus.saveMemory);
-      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
-      setStatus("ready");
-      setMessage("Botones limpiados.");
-    } catch (error) {
-      setStatus("error");
-      setMessage(getErrorMessage(error));
-    }
+    await runRuntimeAction(
+      "Limpiando botones...",
+      clearInternalRuntimeJoypadButtons,
+      "Botones limpiados.",
+    );
   };
 
   const refreshSaveMemory = async () => {
-    setStatus("loading");
-    setMessage("Consultando memoria de guardado...");
-
-    try {
-      const nextStatus = await refreshInternalRuntimeSaveMemoryInfo();
-      setSaveMemory(nextStatus.saveMemory);
-      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
-      setStatus("ready");
-      setMessage("Memoria de guardado actualizada.");
-    } catch (error) {
-      setStatus("error");
-      setMessage(getErrorMessage(error));
-    }
+    await runRuntimeAction(
+      "Consultando memoria de guardado...",
+      refreshInternalRuntimeSaveMemoryInfo,
+      "Memoria de guardado actualizada.",
+    );
   };
 
   const loadSaveMemory = async () => {
-    setStatus("loading");
-    setMessage("Cargando SRAM...");
+    const nextStatus = await runRuntimeAction(
+      "Cargando SRAM...",
+      () => loadInternalRuntimeSaveMemoryFromDisk("save-ram"),
+      "SRAM consultada.",
+    );
 
-    try {
-      const nextStatus = await loadInternalRuntimeSaveMemoryFromDisk("save-ram");
-      setSaveMemory(nextStatus.saveMemory);
-      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
-      setStatus("ready");
-      setMessage(nextStatus.lastSaveOperation?.message ?? "SRAM cargada.");
-    } catch (error) {
-      setStatus("error");
-      setMessage(getErrorMessage(error));
+    if (nextStatus?.lastSaveOperation?.message) {
+      setMessage(nextStatus.lastSaveOperation.message);
     }
   };
 
   const saveSaveMemory = async () => {
-    setStatus("loading");
-    setMessage("Guardando SRAM...");
+    const nextStatus = await runRuntimeAction(
+      "Guardando SRAM...",
+      () => saveInternalRuntimeMemoryToDisk("save-ram"),
+      "SRAM guardada.",
+    );
 
-    try {
-      const nextStatus = await saveInternalRuntimeMemoryToDisk("save-ram");
-      setSaveMemory(nextStatus.saveMemory);
-      setLastSaveOperation(nextStatus.lastSaveOperation ?? null);
-      setStatus("ready");
-      setMessage(nextStatus.lastSaveOperation?.message ?? "SRAM guardada.");
-    } catch (error) {
-      setStatus("error");
-      setMessage(getErrorMessage(error));
+    if (nextStatus?.lastSaveOperation?.message) {
+      setMessage(nextStatus.lastSaveOperation.message);
     }
   };
 
@@ -246,15 +394,15 @@ export function InternalRuntimeFramePreview() {
           <button
             className="secondary-button"
             type="button"
-            onClick={refreshSnapshot}
+            onClick={() => void refreshSnapshot()}
             disabled={status === "loading"}
           >
-            Renderizar último frame
+            Renderizar ultimo frame
           </button>
           <button
             className="secondary-button"
             type="button"
-            onClick={stepAndRender}
+            onClick={() => void stepAndRender()}
             disabled={status === "loading"}
           >
             Avanzar fotograma y renderizar
@@ -262,7 +410,7 @@ export function InternalRuntimeFramePreview() {
           <button
             className="secondary-button"
             type="button"
-            onClick={runBatchAndRender}
+            onClick={() => void runBatchAndRender()}
             disabled={status === "loading"}
           >
             60 fotogramas y renderizar
@@ -270,9 +418,123 @@ export function InternalRuntimeFramePreview() {
         </div>
       </div>
 
+      <div className="internal-frame-preview__runtime">
+        <strong>Configuracion</strong>
+        <span>{`Core: ${trimmedCore || "sin configurar"}`}</span>
+        <span>{`Core path: ${formatPath(runtimeConfig.corePath)}`}</span>
+        <span>{`ROM: ${formatPath(runtimeConfig.romPath)}`}</span>
+        <span>{`Save directory: ${
+          trimmedSaveDirectory || "sin save directory"
+        }`}</span>
+      </div>
+
+      <div className="internal-frame-preview__runtime">
+        <strong>Estado</strong>
+        <span>{`Fase: ${runtimeStatus?.phase ?? "sin leer"}`}</span>
+        <span>{`Core cargado: ${formatFlag(runtimeStatus?.isCoreLoaded)}`}</span>
+        <span>{`Core inicializado: ${formatFlag(
+          runtimeStatus?.isCoreInitialized,
+        )}`}</span>
+        <span>{`ROM cargada: ${formatFlag(runtimeStatus?.isRomLoaded)}`}</span>
+        <span>{`Running: ${formatFlag(runtimeStatus?.isRunning)}`}</span>
+        <span>{`Frames: ${runtimeStatus?.steppedFrames ?? 0}`}</span>
+        <span>{`Ultimo frame: ${
+          runtimeStatus?.latestFrame?.frameNumber ?? "sin frame"
+        }`}</span>
+        {runtimeStatus?.lastError ? (
+          <span>{`Error: ${runtimeStatus.lastError}`}</span>
+        ) : null}
+      </div>
+
+      <div className="internal-frame-preview__setup">
+        <strong>Setup manual</strong>
+        <div className="internal-frame-preview__setup-buttons">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void readRuntimeStatus()}
+            disabled={status === "loading"}
+          >
+            Leer estado
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void prepareRuntime()}
+            disabled={status === "loading" || !hasPrepareConfig}
+          >
+            Preparar
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void loadCore()}
+            disabled={status === "loading"}
+          >
+            Cargar core
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void initCore()}
+            disabled={status === "loading"}
+          >
+            Inicializar core
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void loadGame()}
+            disabled={status === "loading"}
+          >
+            Cargar ROM
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void refreshSaveMemory()}
+            disabled={status === "loading"}
+          >
+            Actualizar memoria
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void loadSaveMemory()}
+            disabled={status === "loading"}
+          >
+            Cargar SRAM
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void saveSaveMemory()}
+            disabled={status === "loading"}
+          >
+            Guardar SRAM
+          </button>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => void prepareLoadCoreInitLoadRom()}
+            disabled={status === "loading" || !hasPrepareConfig}
+          >
+            Preparar + cargar ROM
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void prepareLoadCoreInitLoadRomAndSram()}
+            disabled={status === "loading" || !hasPrepareConfig}
+          >
+            Preparar + cargar ROM + SRAM
+          </button>
+        </div>
+      </div>
+
       <div className="internal-frame-preview__body">
         <div className="internal-frame-preview__canvas-wrap">
-          <canvas ref={canvasRef} aria-label="Último fotograma interno" />
+          <canvas ref={canvasRef} aria-label="Ultimo fotograma interno" />
         </div>
         <div className="internal-frame-preview__meta" aria-live="polite">
           <strong>{status === "loading" ? "Procesando..." : message}</strong>
@@ -322,7 +584,7 @@ export function InternalRuntimeFramePreview() {
             : "Sin botones presionados"}
         </span>
         <span>
-          {`Sondeos: ${inputInfo?.pollCount ?? 0} · Consultas: ${
+          {`Sondeos: ${inputInfo?.pollCount ?? 0} - Consultas: ${
             inputInfo?.stateQueryCount ?? 0
           }`}
         </span>
