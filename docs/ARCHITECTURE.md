@@ -411,6 +411,12 @@ Internal gameplay frames use the snapshot's native dimensions as the canvas back
 
 If the gameplay container does not match the native aspect ratio, the canvas remains centered with letterboxing or pillarboxing instead of being stretched. Legacy external live/captured frames keep their existing full-frame behavior.
 
+### Console-Aware Internal Viewport
+
+The internal `GameplayFrame` now separates the overall stage from the console viewport. For GBA, the viewport shell uses the native `240x160` frame shape and `3:2` aspect ratio; GB/GBC use `160x144` and `10:9`. The canvas keeps the emulator frame as its backing store and fills only the viewport shell, so the surrounding frame background reads as intentional letterboxing or pillarboxing rather than a second misaligned screen.
+
+The console profile is chosen from the run platform when available, then from the reported frame dimensions, with GBA as the final fallback. DS is intentionally not implemented in this shell because it needs a dedicated dual-screen layout. Legacy external rendering does not use the internal viewport shell.
+
 ### Mode-Aware Runtime UI
 
 The play screen now separates legacy external emulator controls from internal Libretro controls.

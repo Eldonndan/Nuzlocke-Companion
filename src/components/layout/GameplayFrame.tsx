@@ -23,6 +23,7 @@ type GameplayFrameProps = {
   internalFrameSnapshot?: InternalFrameSnapshot | null;
   internalFrameSnapshotBase64?: InternalFrameSnapshotBase64 | null;
   internalFrameInfo?: InternalFrameInfo | null;
+  consoleProfile?: ConsoleViewportProfile;
   isInternalRuntime?: boolean;
   usesExternalInternalRenderer?: boolean;
   onInternalCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
@@ -41,6 +42,38 @@ type CanvasDisplaySize = {
   width: number;
   height: number;
 };
+
+export type ConsoleViewportProfile = {
+  system: "gba" | "gb" | "gbc" | "unknown";
+  nativeWidth: number;
+  nativeHeight: number;
+  aspectRatio: number;
+  label: string;
+};
+
+const consoleViewportProfiles = {
+  gba: {
+    system: "gba",
+    nativeWidth: 240,
+    nativeHeight: 160,
+    aspectRatio: 240 / 160,
+    label: "GBA",
+  },
+  gb: {
+    system: "gb",
+    nativeWidth: 160,
+    nativeHeight: 144,
+    aspectRatio: 160 / 144,
+    label: "GB",
+  },
+  gbc: {
+    system: "gbc",
+    nativeWidth: 160,
+    nativeHeight: 144,
+    aspectRatio: 160 / 144,
+    label: "GBC",
+  },
+} as const satisfies Record<string, ConsoleViewportProfile>;
 
 const fallbackInternalFrameSize = {
   width: 240,
@@ -119,6 +152,58 @@ function formatAspectRatio(width: number, height: number) {
   return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`;
 }
 
+function getConsoleProfileForFrame(
+  width: number,
+  height: number,
+  requestedProfile?: ConsoleViewportProfile,
+): ConsoleViewportProfile {
+  if (requestedProfile) {
+    return requestedProfile;
+  }
+
+  if (width === 240 && height === 160) {
+    return consoleViewportProfiles.gba;
+  }
+
+  if (width === 160 && height === 144) {
+    return consoleViewportProfiles.gbc;
+  }
+
+  if (width > 0 && height > 0) {
+    return {
+      system: "unknown",
+      nativeWidth: width,
+      nativeHeight: height,
+      aspectRatio: width / height,
+      label: "Desconocido",
+    };
+  }
+
+  return consoleViewportProfiles.gba;
+}
+
+export function getConsoleViewportProfileForPlatform(
+  platform: string,
+): ConsoleViewportProfile | undefined {
+  const normalizedPlatform = platform.trim().toLowerCase();
+
+  if (normalizedPlatform === "gba" || normalizedPlatform.includes("advance")) {
+    return consoleViewportProfiles.gba;
+  }
+
+  if (normalizedPlatform === "gbc" || normalizedPlatform.includes("color")) {
+    return consoleViewportProfiles.gbc;
+  }
+
+  if (normalizedPlatform === "gb" || normalizedPlatform.includes("game boy")) {
+    return consoleViewportProfiles.gb;
+  }
+
+  // DS is intentionally not implemented yet. It will need a dual-screen viewport
+  // instead of a single aspect-ratio shell.
+  return undefined;
+}
+
 function decodeBase64ToUint8ClampedArray(base64: string) {
   const binary = window.atob(base64);
   const bytes = new Uint8ClampedArray(binary.length);
@@ -138,6 +223,7 @@ export function GameplayFrame({
   internalFrameSnapshot,
   internalFrameSnapshotBase64,
   internalFrameInfo,
+  consoleProfile,
   isInternalRuntime = false,
   usesExternalInternalRenderer = false,
   onInternalCanvasReady,
@@ -177,6 +263,11 @@ export function GameplayFrame({
     internalNativeHeight,
     screenSize.width,
     screenSize.height,
+  );
+  const resolvedConsoleProfile = getConsoleProfileForFrame(
+    internalNativeWidth,
+    internalNativeHeight,
+    consoleProfile,
   );
 
   useEffect(() => {
@@ -273,11 +364,19 @@ export function GameplayFrame({
     internalNativeWidth,
     internalNativeHeight,
   )}`;
+  const internalFooterLabel =
+    resolvedConsoleProfile.system === "unknown"
+      ? `Runtime interno · ${internalFrameLabel}`
+      : `Runtime interno · ${resolvedConsoleProfile.label} · ${internalFrameLabel}`;
 
   return (
     <section className="gameplay-frame" aria-label="Area de juego">
       <div
-        className="gameplay-frame__screen"
+        className={
+          isInternalRuntime
+            ? "gameplay-frame__screen gameplay-frame__screen--internal"
+            : "gameplay-frame__screen"
+        }
         ref={setScreenElement}
         tabIndex={isKeyboardInputEnabled ? 0 : undefined}
         onFocus={isKeyboardInputEnabled ? onKeyboardFocus : undefined}
@@ -286,31 +385,30 @@ export function GameplayFrame({
         onKeyUp={isKeyboardInputEnabled ? onKeyboardKeyUp : undefined}
         onMouseDown={isKeyboardInputEnabled ? focusKeyboardTarget : undefined}
       >
-        {shouldRenderCanvas ? (
+        {hasInternalFrame ? (
+          <div
+            className={`gameplay-frame__viewport-shell gameplay-frame__viewport-shell--${resolvedConsoleProfile.system}`}
+            style={{
+              width: `${internalDisplaySize.width}px`,
+              height: `${internalDisplaySize.height}px`,
+              aspectRatio: `${internalNativeWidth} / ${internalNativeHeight}`,
+            }}
+          >
+            <canvas
+              ref={setCanvasElement}
+              className="gameplay-frame__image gameplay-frame__image--internal"
+              aria-label={`Runtime interno de ${gameName}`}
+            />
+          </div>
+        ) : shouldRenderCanvas ? (
           <canvas
             ref={setCanvasElement}
-            className={
-              hasInternalFrame
-                ? "gameplay-frame__image gameplay-frame__image--internal"
-                : "gameplay-frame__image gameplay-frame__image--legacy"
-            }
-            style={
-              hasInternalFrame
-                ? {
-                    width: `${internalDisplaySize.width}px`,
-                    height: `${internalDisplaySize.height}px`,
-                  }
-                : undefined
-            }
-            aria-label={
-              hasInternalFrame
-                ? `Runtime interno de ${gameName}`
-                : `Captura en vivo de ${gameName}`
-            }
+            className="gameplay-frame__image gameplay-frame__image--legacy"
+            aria-label={`Captura en vivo de ${gameName}`}
           />
         ) : capturedFrame ? (
           <img
-            className="gameplay-frame__image"
+            className="gameplay-frame__image gameplay-frame__image--legacy"
             src={capturedFrame.imageDataUrl}
             alt={`Frame de prueba de ${gameName}`}
           />
@@ -335,7 +433,7 @@ export function GameplayFrame({
         <span>Vista de juego</span>
         <strong>
           {hasInternalFrame
-            ? `Runtime interno · ${internalFrameLabel}`
+            ? internalFooterLabel
             : hasLiveFrame
               ? "Captura activa"
               : capturedFrame

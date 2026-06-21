@@ -4,7 +4,10 @@ import { EmulatorConfigPanel } from "../components/emulator/EmulatorConfigPanel"
 import { InternalRuntimeDisplayController } from "../components/emulator/InternalRuntimeDisplayController";
 import { InternalRuntimeFramePreview } from "../components/emulator/InternalRuntimeFramePreview";
 import { QuickEditPanel } from "../components/edit/QuickEditPanel";
-import { GameplayFrame } from "../components/layout/GameplayFrame";
+import {
+  GameplayFrame,
+  getConsoleViewportProfileForPlatform,
+} from "../components/layout/GameplayFrame";
 import {
   InternalPlaySidePanel,
   type InternalPlayTab,
@@ -209,6 +212,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const editingPokemon =
     editingSlotIndex === null ? null : runState.team[editingSlotIndex];
   const runtimeConfig = getRunRuntimeConfig(runState);
+  const consoleProfile = getConsoleViewportProfileForPlatform(runState.platform);
   const isLegacyRuntime = isLegacyExternalRuntime(runtimeConfig);
   const isInternalRuntime = isInternalLibretroRuntime(runtimeConfig);
   const emulatorConfig = isLegacyRuntime
@@ -1416,6 +1420,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
             liveFrame={null}
             internalFrameSnapshotBase64={internalFrameSnapshotBase64}
             internalFrameInfo={internalFrameInfo}
+            consoleProfile={consoleProfile}
             isInternalRuntime
             usesExternalInternalRenderer
             onInternalCanvasReady={setInternalCanvas}
