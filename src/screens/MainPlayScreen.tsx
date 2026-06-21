@@ -53,6 +53,7 @@ import {
   loadSavedRun,
   saveRun,
 } from "../utils/runStorage";
+import type { InternalFrameSnapshot } from "../utils/internalRuntimeCommands";
 import {
   createDefaultLegacyExternalRuntimeConfig,
   getRunRuntimeConfig,
@@ -162,6 +163,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const [sessionStatus, setSessionStatus] = useState("");
   const [capturedFrame, setCapturedFrame] = useState<CapturedFrame | null>(null);
   const [liveFrame, setLiveFrame] = useState<LiveCaptureFrame | null>(null);
+  const [internalFrameSnapshot, setInternalFrameSnapshot] =
+    useState<InternalFrameSnapshot | null>(null);
   const [frameStatus, setFrameStatus] = useState("");
   const [captureFps, setCaptureFps] = useState<CaptureFps>(30);
   const [captureSession, setCaptureSession] = useState<CaptureSessionStatus | null>(null);
@@ -363,6 +366,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     void stopNativeCapture("Captura detenida");
     void hideOverlay();
     void undockCurrentGame();
+    setInternalFrameSnapshot(null);
     setRunState((currentRun) => ({
       ...withRunRuntimeConfig(currentRun, config),
       captureWindow: undefined,
@@ -983,6 +987,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     setEditingSlotIndex(null);
     setCapturedFrame(null);
     setLiveFrame(null);
+    setInternalFrameSnapshot(null);
     setRunState(cloneRunState(run));
     setSaveStatus("Guardado local");
     setWindowStatus("Ventana de juego sin detectar");
@@ -992,6 +997,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     void stopNativeCapture("Captura detenida");
     void hideOverlay();
     void undockCurrentGame();
+    setInternalFrameSnapshot(null);
     onExit();
   };
 
@@ -1062,6 +1068,12 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       unlistenHotkey?.();
     };
   }, [isOverlayEditing, runState.captureWindow, runState.lives, runState.captureStatus]);
+
+  useEffect(() => {
+    if (!isInternalRuntime) {
+      setInternalFrameSnapshot(null);
+    }
+  }, [isInternalRuntime]);
 
   useEffect(() => {
     if (!isCaptureSessionRunning) {
@@ -1248,7 +1260,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       </section>
 
       {isInternalRuntime ? (
-        <InternalRuntimeFramePreview runtimeConfig={runtimeConfig} />
+        <InternalRuntimeFramePreview
+          runtimeConfig={runtimeConfig}
+          onFrameSnapshot={setInternalFrameSnapshot}
+        />
       ) : null}
 
       <section className="play-layout" aria-label="Diseño principal">
@@ -1257,6 +1272,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           routeName={runState.currentRoute.name}
           capturedFrame={capturedFrame}
           liveFrame={liveFrame}
+          internalFrameSnapshot={
+            isInternalRuntime ? internalFrameSnapshot : null
+          }
+          isInternalRuntime={isInternalRuntime}
           captureStatus={frameStatus}
           isCapturing={isCaptureSessionRunning}
           screenRef={gameplayScreenRef}

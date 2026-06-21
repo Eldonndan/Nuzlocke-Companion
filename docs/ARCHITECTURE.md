@@ -319,6 +319,17 @@ Legacy external mode keeps the existing mGBA executable, ROM path, and launch ar
 
 The selected configuration is stored in `RunState.runtimeConfig`. Deprecated `RunState.emulatorConfig` remains only for old local-save compatibility. The internal mode UI is still a debug flow and does not implement final start/pause/resume, audio, autosave, or packaged emulator assets.
 
+### Internal Runtime Main GameplayFrame Rendering
+
+The internal Libretro debug path can now render into the main `GameplayFrame`:
+
+- `InternalRuntimeFramePreview` still owns the debug controls, bounded loop, and explicit snapshot requests.
+- When the preview successfully renders an `InternalFrameSnapshot`, it lifts that snapshot to `MainPlayScreen`.
+- `MainPlayScreen` passes the latest internal snapshot to `GameplayFrame` only while the run uses `internal-libretro`.
+- `GameplayFrame` prioritizes internal snapshots, then legacy live capture, then still captured frames, then the manual placeholder.
+
+This keeps the legacy external emulator and capture behavior intact. The internal path still moves full RGBA buffers through explicit invokes and React state, so it is not the final streaming or optimized renderer.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

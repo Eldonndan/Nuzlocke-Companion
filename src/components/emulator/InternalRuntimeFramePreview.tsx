@@ -34,6 +34,7 @@ type PreviewStatus = "idle" | "loading" | "ready" | "empty" | "error";
 
 type InternalRuntimeFramePreviewProps = {
   runtimeConfig: InternalLibretroRuntimeConfig;
+  onFrameSnapshot?: (snapshot: InternalFrameSnapshot | null) => void;
 };
 
 const DEBUG_LOOP_BATCH_FRAMES = 6;
@@ -108,6 +109,7 @@ function isEditableTarget(target: EventTarget | null) {
 
 export function InternalRuntimeFramePreview({
   runtimeConfig,
+  onFrameSnapshot,
 }: InternalRuntimeFramePreviewProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -201,6 +203,7 @@ export function InternalRuntimeFramePreview({
   ) => {
     if (!nextSnapshot) {
       setSnapshot(null);
+      onFrameSnapshot?.(null);
       setStatus("empty");
       setMessage("No hay fotograma disponible todavia.");
       return false;
@@ -232,6 +235,7 @@ export function InternalRuntimeFramePreview({
       0,
     );
     setSnapshot(nextSnapshot);
+    onFrameSnapshot?.(nextSnapshot);
     if (!options.silent) {
       setStatus("ready");
       setMessage("Frame renderizado.");

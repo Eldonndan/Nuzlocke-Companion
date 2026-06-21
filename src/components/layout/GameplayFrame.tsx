@@ -1,21 +1,51 @@
 import { type RefObject, useEffect, useRef } from "react";
 import type { CapturedFrame, LiveCaptureFrame } from "../../shared/types";
+import type { InternalFrameSnapshot } from "../../utils/internalRuntimeCommands";
 
 type GameplayFrameProps = {
   gameName: string;
   routeName: string;
   capturedFrame: CapturedFrame | null;
   liveFrame: LiveCaptureFrame | null;
+  internalFrameSnapshot?: InternalFrameSnapshot | null;
+  isInternalRuntime?: boolean;
   captureStatus: string;
   isCapturing: boolean;
   screenRef?: RefObject<HTMLDivElement | null>;
 };
+
+function drawRgbaFrame(
+  canvas: HTMLCanvasElement,
+  width: number,
+  height: number,
+  rgba: Iterable<number>,
+) {
+  const pixels = new Uint8ClampedArray(Array.from(rgba));
+  const expectedLength = width * height * 4;
+
+  if (pixels.length !== expectedLength) {
+    return false;
+  }
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return false;
+  }
+
+  canvas.width = width;
+  canvas.height = height;
+  context.putImageData(new ImageData(pixels, width, height), 0, 0);
+  return true;
+}
 
 export function GameplayFrame({
   gameName,
   routeName,
   capturedFrame,
   liveFrame,
+  internalFrameSnapshot,
+  isInternalRuntime = false,
   captureStatus,
   isCapturing,
   screenRef,
@@ -23,14 +53,23 @@ export function GameplayFrame({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    if (!liveFrame || !canvasRef.current) {
+    if (!canvasRef.current) {
       return;
     }
 
     const canvas = canvasRef.current;
-    const context = canvas.getContext("2d");
 
-    if (!context) {
+    if (isInternalRuntime && internalFrameSnapshot) {
+      drawRgbaFrame(
+        canvas,
+        internalFrameSnapshot.width,
+        internalFrameSnapshot.height,
+        new Uint8ClampedArray(internalFrameSnapshot.rgba),
+      );
+      return;
+    }
+
+    if (!liveFrame) {
       return;
     }
 
@@ -41,21 +80,25 @@ export function GameplayFrame({
       pixels[index] = binaryFrame.charCodeAt(index);
     }
 
-    canvas.width = liveFrame.width;
-    canvas.height = liveFrame.height;
-    context.putImageData(new ImageData(pixels, liveFrame.width, liveFrame.height), 0, 0);
-  }, [liveFrame]);
+    drawRgbaFrame(canvas, liveFrame.width, liveFrame.height, pixels);
+  }, [internalFrameSnapshot, isInternalRuntime, liveFrame]);
 
+  const hasInternalFrame = Boolean(isInternalRuntime && internalFrameSnapshot);
   const hasLiveFrame = Boolean(liveFrame);
+  const shouldRenderCanvas = hasInternalFrame || hasLiveFrame;
 
   return (
     <section className="gameplay-frame" aria-label="Area de juego">
       <div className="gameplay-frame__screen" ref={screenRef}>
-        {hasLiveFrame ? (
+        {shouldRenderCanvas ? (
           <canvas
             ref={canvasRef}
             className="gameplay-frame__image"
-            aria-label={`Captura en vivo de ${gameName}`}
+            aria-label={
+              hasInternalFrame
+                ? `Runtime interno de ${gameName}`
+                : `Captura en vivo de ${gameName}`
+            }
           />
         ) : capturedFrame ? (
           <img
@@ -83,7 +126,13 @@ export function GameplayFrame({
       <div className="gameplay-frame__footer">
         <span>Vista de juego</span>
         <strong>
-          {hasLiveFrame ? "Captura activa" : capturedFrame ? "Frame de prueba" : "Manual"}
+          {hasInternalFrame
+            ? "Runtime interno"
+            : hasLiveFrame
+              ? "Captura activa"
+              : capturedFrame
+                ? "Frame de prueba"
+                : "Manual"}
         </strong>
       </div>
     </section>
