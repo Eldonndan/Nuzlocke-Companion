@@ -221,6 +221,7 @@ impl InternalEmulationState {
             (loaded_game, environment_info)
         };
 
+        reset_input_state();
         self.mark_game_loaded(loaded_game, environment_info)
     }
 
