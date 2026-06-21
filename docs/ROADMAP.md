@@ -101,6 +101,7 @@ Status:
 - Reduced unnecessary frontend RGBA copies in the debug renderer while keeping the explicit invoke snapshot flow.
 - Added a frontend teardown guard so destructive play-screen actions are blocked while the internal debug loop is running.
 - Added a minimal debug audio path that captures Libretro PCM into a bounded Rust buffer and drains chunks to Web Audio from the debug preview.
+- Improved internal runtime play layout so the main gameplay frame owns the visual area, the debug panel is scrollable, and scoped keyboard input works from the gameplay frame.
 - Final continuous gameplay loop, efficient frame transport, physical input, real audio pipelines, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline

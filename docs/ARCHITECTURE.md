@@ -371,6 +371,12 @@ The internal Libretro debug path now captures minimal audio for smoke testing:
 
 This is not the final audio system. It does not implement native streaming, audio/video synchronization, `internal_runtime_start`, pause/resume, or a native output device. Legacy external emulator mode is unchanged.
 
+### Internal Runtime Play Layout and Scoped Gameplay Input
+
+Internal Libretro mode now gives the main `GameplayFrame` the primary visual space and keeps the debug runtime panel below it as a compact scrollable control surface. This prevents setup, loop, audio, input, and SRAM controls from being hidden behind the game canvas.
+
+The main gameplay frame is focusable only in internal runtime mode. Clicking it activates the same scoped keyboard Joypad input used by the debug panel, without registering global `window` or `document` keyboard listeners. Legacy external mode keeps its existing window/capture/overlay behavior unchanged.
+
 ### Mode-Aware Runtime UI
 
 The play screen now separates legacy external emulator controls from internal Libretro controls.

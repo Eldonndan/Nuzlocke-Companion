@@ -1206,7 +1206,11 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   }, []);
 
   return (
-    <main className="play-screen">
+    <main
+      className={
+        isInternalRuntime ? "play-screen play-screen--internal" : "play-screen"
+      }
+    >
       <header className="play-topbar">
         <div className="play-topbar__identity">
           <p className="eyebrow">Juego</p>
@@ -1350,7 +1354,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
             <strong>Modo interno Libretro</strong>
             <span>El juego se renderiza dentro de la app usando tu core local.</span>
             <span>Usa la preview debug para preparar, iniciar el loop y guardar SRAM.</span>
-            <span>Haz click en la tarjeta del runtime para activar teclado local.</span>
+            <span>Haz click en el juego para activar teclado local.</span>
           </>
         ) : (
           <>
@@ -1361,14 +1365,6 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           </>
         )}
       </section>
-
-      {isInternalRuntime ? (
-        <InternalRuntimeFramePreview
-          runtimeConfig={runtimeConfig}
-          onFrameSnapshot={setInternalFrameSnapshot}
-          onDebugLoopRunningChange={setIsInternalDebugLoopRunning}
-        />
-      ) : null}
 
       <section className="play-layout" aria-label="Diseño principal">
         <GameplayFrame
@@ -1383,9 +1379,19 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           captureStatus={frameStatus}
           isCapturing={isCaptureSessionRunning}
           screenRef={gameplayScreenRef}
+          isKeyboardInputEnabled={isInternalRuntime}
         />
         <TeamPanel team={runState.team} onEditSlot={setEditingSlotIndex} />
       </section>
+
+      {isInternalRuntime ? (
+        <InternalRuntimeFramePreview
+          runtimeConfig={runtimeConfig}
+          onFrameSnapshot={setInternalFrameSnapshot}
+          onDebugLoopRunningChange={setIsInternalDebugLoopRunning}
+          keyboardTargetRef={gameplayScreenRef}
+        />
+      ) : null}
 
       <div className="emulator-status" aria-live="polite">
         {isInternalRuntime ? (

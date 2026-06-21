@@ -170,6 +170,10 @@ h3 {
   padding: 14px;
 }
 
+.play-screen--internal {
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(180px, 260px) auto auto;
+}
+
 .play-topbar,
 .status-bar,
 .team-panel {
@@ -308,6 +312,16 @@ h3 {
   padding: 12px;
 }
 
+.play-screen--internal .internal-frame-preview {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  max-height: 260px;
+  overflow: auto;
+  gap: 8px;
+  padding: 10px;
+}
+
 .internal-frame-preview:focus-visible {
   outline: 2px solid rgba(133, 216, 255, 0.9);
   outline-offset: 3px;
@@ -344,6 +358,11 @@ h3 {
   align-items: start;
 }
 
+.play-screen--internal .internal-frame-preview__body {
+  grid-template-columns: minmax(120px, 180px) 1fr;
+  gap: 8px;
+}
+
 .internal-frame-preview__canvas-wrap {
   display: grid;
   place-items: center;
@@ -354,11 +373,19 @@ h3 {
   overflow: hidden;
 }
 
+.play-screen--internal .internal-frame-preview__canvas-wrap {
+  min-height: 90px;
+}
+
 .internal-frame-preview canvas {
   width: 100%;
   max-width: 360px;
   height: auto;
   image-rendering: pixelated;
+}
+
+.play-screen--internal .internal-frame-preview canvas {
+  max-width: 180px;
 }
 
 .internal-frame-preview__meta {
@@ -490,6 +517,10 @@ h3 {
   min-height: 0;
 }
 
+.play-screen--internal .play-layout {
+  min-height: 0;
+}
+
 .gameplay-frame {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
@@ -516,6 +547,11 @@ h3 {
   background:
     linear-gradient(135deg, rgba(64, 150, 255, 0.28), transparent 42%),
     linear-gradient(180deg, #122c4f 0%, #081221 100%);
+}
+
+.gameplay-frame__screen:focus-visible {
+  outline: 2px solid rgba(133, 216, 255, 0.9);
+  outline-offset: 3px;
 }
 
 .gameplay-frame__screen::before {

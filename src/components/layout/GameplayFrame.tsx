@@ -1,4 +1,11 @@
-import { type RefObject, useEffect, useRef } from "react";
+import {
+  type FocusEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+  type RefObject,
+  useEffect,
+  useRef,
+} from "react";
 import type { CapturedFrame, LiveCaptureFrame } from "../../shared/types";
 import type { InternalFrameSnapshot } from "../../utils/internalRuntimeCommands";
 
@@ -12,6 +19,11 @@ type GameplayFrameProps = {
   captureStatus: string;
   isCapturing: boolean;
   screenRef?: RefObject<HTMLDivElement | null>;
+  isKeyboardInputEnabled?: boolean;
+  onKeyboardFocus?: () => void;
+  onKeyboardBlur?: (event: FocusEvent<HTMLDivElement>) => void;
+  onKeyboardKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
+  onKeyboardKeyUp?: (event: KeyboardEvent<HTMLDivElement>) => void;
 };
 
 type RgbaPixels = Uint8ClampedArray<ArrayBuffer>;
@@ -40,6 +52,10 @@ function drawRgbaFrame(
   return true;
 }
 
+function focusKeyboardTarget(event: MouseEvent<HTMLDivElement>) {
+  event.currentTarget.focus();
+}
+
 export function GameplayFrame({
   gameName,
   routeName,
@@ -50,6 +66,11 @@ export function GameplayFrame({
   captureStatus,
   isCapturing,
   screenRef,
+  isKeyboardInputEnabled = false,
+  onKeyboardFocus,
+  onKeyboardBlur,
+  onKeyboardKeyDown,
+  onKeyboardKeyUp,
 }: GameplayFrameProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -90,7 +111,16 @@ export function GameplayFrame({
 
   return (
     <section className="gameplay-frame" aria-label="Area de juego">
-      <div className="gameplay-frame__screen" ref={screenRef}>
+      <div
+        className="gameplay-frame__screen"
+        ref={screenRef}
+        tabIndex={isKeyboardInputEnabled ? 0 : undefined}
+        onFocus={isKeyboardInputEnabled ? onKeyboardFocus : undefined}
+        onBlur={isKeyboardInputEnabled ? onKeyboardBlur : undefined}
+        onKeyDown={isKeyboardInputEnabled ? onKeyboardKeyDown : undefined}
+        onKeyUp={isKeyboardInputEnabled ? onKeyboardKeyUp : undefined}
+        onMouseDown={isKeyboardInputEnabled ? focusKeyboardTarget : undefined}
+      >
         {shouldRenderCanvas ? (
           <canvas
             ref={canvasRef}

@@ -1,6 +1,7 @@
 import {
   type FocusEvent,
   type KeyboardEvent,
+  type RefObject,
   useEffect,
   useRef,
   useState,
@@ -49,6 +50,7 @@ type InternalRuntimeFramePreviewProps = {
   runtimeConfig: InternalLibretroRuntimeConfig;
   onFrameSnapshot?: (snapshot: InternalFrameSnapshot | null) => void;
   onDebugLoopRunningChange?: (isRunning: boolean) => void;
+  keyboardTargetRef?: RefObject<HTMLElement | null>;
 };
 
 const DEBUG_LOOP_BATCH_FRAMES = 6;
@@ -126,6 +128,7 @@ export function InternalRuntimeFramePreview({
   runtimeConfig,
   onFrameSnapshot,
   onDebugLoopRunningChange,
+  keyboardTargetRef,
 }: InternalRuntimeFramePreviewProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -671,35 +674,57 @@ export function InternalRuntimeFramePreview({
     }
   };
 
-  const handleKeyboardKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    const button = keyboardJoypadMap[event.code];
+  const handleKeyboardDown = (
+    code: string,
+    repeat: boolean,
+    target: EventTarget | null,
+    preventDefault: () => void,
+  ) => {
+    const button = keyboardJoypadMap[code];
 
-    if (!button || isEditableTarget(event.target)) {
+    if (!button || isEditableTarget(target)) {
       return;
     }
 
-    event.preventDefault();
+    preventDefault();
 
-    if (event.repeat || heldKeyboardKeysRef.current.has(event.code)) {
+    if (repeat || heldKeyboardKeysRef.current.has(code)) {
       return;
     }
 
-    heldKeyboardKeysRef.current.add(event.code);
+    heldKeyboardKeysRef.current.add(code);
     heldKeyboardButtonsRef.current.add(button);
     void setKeyboardButton(button, true);
   };
 
-  const handleKeyboardKeyUp = (event: KeyboardEvent<HTMLElement>) => {
-    const button = keyboardJoypadMap[event.code];
+  const handleKeyboardUp = (
+    code: string,
+    target: EventTarget | null,
+    preventDefault: () => void,
+  ) => {
+    const button = keyboardJoypadMap[code];
 
-    if (!button || isEditableTarget(event.target)) {
+    if (!button || isEditableTarget(target)) {
       return;
     }
 
-    event.preventDefault();
-    heldKeyboardKeysRef.current.delete(event.code);
+    preventDefault();
+    heldKeyboardKeysRef.current.delete(code);
     heldKeyboardButtonsRef.current.delete(button);
     void setKeyboardButton(button, false);
+  };
+
+  const handleKeyboardKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    handleKeyboardDown(
+      event.code,
+      event.repeat,
+      event.target,
+      () => event.preventDefault(),
+    );
+  };
+
+  const handleKeyboardKeyUp = (event: KeyboardEvent<HTMLElement>) => {
+    handleKeyboardUp(event.code, event.target, () => event.preventDefault());
   };
 
   const releaseHeldKeyboardButtons = async () => {
@@ -717,7 +742,8 @@ export function InternalRuntimeFramePreview({
 
     if (
       nextTarget instanceof Node &&
-      sectionRef.current?.contains(nextTarget)
+      (sectionRef.current?.contains(nextTarget) ||
+        keyboardTargetRef?.current?.contains(nextTarget))
     ) {
       return;
     }
@@ -725,6 +751,55 @@ export function InternalRuntimeFramePreview({
     setIsKeyboardFocused(false);
     void releaseHeldKeyboardButtons();
   };
+
+  useEffect(() => {
+    const keyboardTarget = keyboardTargetRef?.current;
+
+    if (!keyboardTarget) {
+      return;
+    }
+
+    const handleTargetFocus = () => {
+      setIsKeyboardFocused(true);
+    };
+    const handleTargetKeyDown = (event: globalThis.KeyboardEvent) => {
+      handleKeyboardDown(
+        event.code,
+        event.repeat,
+        event.target,
+        () => event.preventDefault(),
+      );
+    };
+    const handleTargetKeyUp = (event: globalThis.KeyboardEvent) => {
+      handleKeyboardUp(event.code, event.target, () => event.preventDefault());
+    };
+    const handleTargetBlur = (event: globalThis.FocusEvent) => {
+      const nextTarget = event.relatedTarget;
+
+      if (
+        nextTarget instanceof Node &&
+        (sectionRef.current?.contains(nextTarget) ||
+          keyboardTarget.contains(nextTarget))
+      ) {
+        return;
+      }
+
+      setIsKeyboardFocused(false);
+      void releaseHeldKeyboardButtons();
+    };
+
+    keyboardTarget.addEventListener("focus", handleTargetFocus);
+    keyboardTarget.addEventListener("keydown", handleTargetKeyDown);
+    keyboardTarget.addEventListener("keyup", handleTargetKeyUp);
+    keyboardTarget.addEventListener("blur", handleTargetBlur);
+
+    return () => {
+      keyboardTarget.removeEventListener("focus", handleTargetFocus);
+      keyboardTarget.removeEventListener("keydown", handleTargetKeyDown);
+      keyboardTarget.removeEventListener("keyup", handleTargetKeyUp);
+      keyboardTarget.removeEventListener("blur", handleTargetBlur);
+    };
+  }, [keyboardTargetRef]);
 
   useEffect(() => {
     return () => {
