@@ -383,6 +383,12 @@ Internal Libretro mode now gives the main `GameplayFrame` the primary visual spa
 
 The main gameplay frame is focusable only in internal runtime mode. Clicking it activates the same scoped keyboard Joypad input used by the debug panel, without registering global `window` or `document` keyboard listeners. Legacy external mode keeps its existing window/capture/overlay behavior unchanged.
 
+### Internal Debug Panel Collapse and Audio Backlog Control
+
+The internal debug panel can be collapsed into a compact gameplay bar. The collapsed bar keeps critical smoke-test controls available: loop start/stop, audio debug toggle, SRAM save, button clearing, and basic loop/audio status. When collapsed, the play screen gives more vertical space back to the main `GameplayFrame`.
+
+Debug audio now drains larger bounded chunks and can drain multiple chunks per batch. If the Rust audio buffer is already far behind, the frontend clears the stale buffer instead of playing delayed samples. Web Audio scheduling is also capped to avoid building too much queued playback. This is still a debug audio path, not final synchronized emulator audio.
+
 ### Mode-Aware Runtime UI
 
 The play screen now separates legacy external emulator controls from internal Libretro controls.

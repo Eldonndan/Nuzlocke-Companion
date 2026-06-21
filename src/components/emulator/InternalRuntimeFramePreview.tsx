@@ -50,12 +50,16 @@ type InternalRuntimeFramePreviewProps = {
   runtimeConfig: InternalLibretroRuntimeConfig;
   onFrameSnapshot?: (snapshot: InternalFrameSnapshot | null) => void;
   onDebugLoopRunningChange?: (isRunning: boolean) => void;
+  onDebugPanelCollapsedChange?: (collapsed: boolean) => void;
   keyboardTargetRef?: RefObject<HTMLElement | null>;
 };
 
 const DEBUG_LOOP_BATCH_FRAMES = 6;
 const DEBUG_LOOP_TARGET_FPS = 60;
-const DEBUG_AUDIO_DRAIN_FRAMES = 4096;
+const DEBUG_AUDIO_MAX_DRAIN_FRAMES = 8192;
+const DEBUG_AUDIO_MAX_DRAIN_ATTEMPTS = 3;
+const DEBUG_AUDIO_BACKLOG_RESET_FRAMES = 48_000;
+const DEBUG_AUDIO_MAX_LEAD_SECONDS = 0.25;
 
 const joypadButtons: Array<{ button: InternalJoypadButton; label: string }> = [
   { button: "up", label: "Arriba" },
@@ -128,6 +132,7 @@ export function InternalRuntimeFramePreview({
   runtimeConfig,
   onFrameSnapshot,
   onDebugLoopRunningChange,
+  onDebugPanelCollapsedChange,
   keyboardTargetRef,
 }: InternalRuntimeFramePreviewProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -153,6 +158,7 @@ export function InternalRuntimeFramePreview({
     useState("Audio debug apagado.");
   const [status, setStatus] = useState<PreviewStatus>("idle");
   const [message, setMessage] = useState("Sin fotograma renderizado.");
+  const [isDebugPanelCollapsed, setIsDebugPanelCollapsed] = useState(false);
   const [isDebugLoopRunning, setIsDebugLoopRunning] = useState(false);
   const [debugLoopFramesRendered, setDebugLoopFramesRendered] = useState(0);
   const [isKeyboardFocused, setIsKeyboardFocused] = useState(false);
@@ -351,6 +357,13 @@ export function InternalRuntimeFramePreview({
     source.buffer = buffer;
     source.connect(context.destination);
 
+    if (
+      nextAudioTimeRef.current - context.currentTime >
+      DEBUG_AUDIO_MAX_LEAD_SECONDS
+    ) {
+      nextAudioTimeRef.current = context.currentTime;
+    }
+
     const startAt = Math.max(context.currentTime, nextAudioTimeRef.current);
     source.start(startAt);
     nextAudioTimeRef.current = startAt + buffer.duration;
@@ -362,11 +375,41 @@ export function InternalRuntimeFramePreview({
     }
 
     try {
-      const chunk = await drainInternalRuntimeAudioChunk(DEBUG_AUDIO_DRAIN_FRAMES);
-      enqueueAudioChunk(chunk);
+      let currentStatus = await getInternalRuntimeStatus();
+      applyRuntimeStatus(currentStatus);
+
+      if (
+        currentStatus.audioInfo.bufferedFrames >
+        DEBUG_AUDIO_BACKLOG_RESET_FRAMES
+      ) {
+        currentStatus = await clearInternalRuntimeAudioBuffer();
+        applyRuntimeStatus(currentStatus);
+        nextAudioTimeRef.current = audioContextRef.current?.currentTime ?? 0;
+        setAudioDebugMessage("Audio debug: buffer atrasado limpiado.");
+        return;
+      }
+
+      let drainedFrames = 0;
+
+      for (
+        let attempt = 0;
+        attempt < DEBUG_AUDIO_MAX_DRAIN_ATTEMPTS;
+        attempt += 1
+      ) {
+        const chunk = await drainInternalRuntimeAudioChunk(
+          DEBUG_AUDIO_MAX_DRAIN_FRAMES,
+        );
+        drainedFrames += chunk.frames;
+        enqueueAudioChunk(chunk);
+
+        if (chunk.frames < DEBUG_AUDIO_MAX_DRAIN_FRAMES) {
+          break;
+        }
+      }
+
       setAudioDebugMessage(
-        chunk.frames > 0
-          ? `Audio debug: ${chunk.frames} frames drenados.`
+        drainedFrames > 0
+          ? `Audio debug: ${drainedFrames} frames drenados.`
           : "Audio debug: sin muestras nuevas.",
       );
       const nextStatus = await getInternalRuntimeStatus();
@@ -802,6 +845,10 @@ export function InternalRuntimeFramePreview({
   }, [keyboardTargetRef]);
 
   useEffect(() => {
+    onDebugPanelCollapsedChange?.(isDebugPanelCollapsed);
+  }, [isDebugPanelCollapsed, onDebugPanelCollapsedChange]);
+
+  useEffect(() => {
     return () => {
       debugLoopCancelRequestedRef.current = true;
 
@@ -813,17 +860,22 @@ export function InternalRuntimeFramePreview({
       void clearInternalRuntimeAudioBuffer();
       void audioContextRef.current?.close();
       onDebugLoopRunningChange?.(false);
+      onDebugPanelCollapsedChange?.(false);
     };
-  }, [onDebugLoopRunningChange]);
+  }, [onDebugLoopRunningChange, onDebugPanelCollapsedChange]);
+
+  const previewClassName = [
+    "internal-frame-preview",
+    isKeyboardFocused ? "internal-frame-preview--keyboard-focused" : "",
+    isDebugPanelCollapsed ? "internal-frame-preview--collapsed" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <section
       ref={sectionRef}
-      className={
-        isKeyboardFocused
-          ? "internal-frame-preview internal-frame-preview--keyboard-focused"
-          : "internal-frame-preview"
-      }
+      className={previewClassName}
       aria-label="Vista previa interna"
       tabIndex={0}
       onFocus={() => setIsKeyboardFocused(true)}
@@ -837,6 +889,17 @@ export function InternalRuntimeFramePreview({
           <h2>Vista previa de fotograma</h2>
         </div>
         <div className="internal-frame-preview__actions">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() =>
+              setIsDebugPanelCollapsed((currentValue) => !currentValue)
+            }
+          >
+            {isDebugPanelCollapsed ? "Mostrar debug" : "Ocultar debug"}
+          </button>
+          {!isDebugPanelCollapsed ? (
+            <>
           <button
             className="secondary-button"
             type="button"
@@ -861,9 +924,63 @@ export function InternalRuntimeFramePreview({
           >
             60 fotogramas y renderizar
           </button>
+            </>
+          ) : null}
         </div>
       </div>
 
+      <div className="internal-frame-preview__compact-bar">
+        <strong>{isDebugLoopRunning ? "Loop activo" : "Loop inactivo"}</strong>
+        <span>{`Frames: ${debugLoopFramesRendered}`}</span>
+        <span>{isAudioDebugEnabled ? "Audio activo" : "Audio apagado"}</span>
+        <span>{`Buffer audio: ${audioInfo?.bufferedFrames ?? 0}`}</span>
+        <button
+          className="primary-button"
+          type="button"
+          onClick={() => void startDebugRenderLoop()}
+          disabled={isActionLoading || isDebugLoopRunning}
+        >
+          Iniciar loop
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => void stopDebugRenderLoop()}
+          disabled={!isDebugLoopRunning}
+        >
+          Detener loop
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() =>
+            isAudioDebugEnabled
+              ? void disableAudioDebug()
+              : void enableAudioDebug()
+          }
+        >
+          {isAudioDebugEnabled ? "Desactivar audio" : "Activar audio"}
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => void saveSaveMemory()}
+          disabled={disableLifecycleActions}
+        >
+          Guardar SRAM
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => void clearJoypadButtons()}
+          disabled={isActionLoading}
+        >
+          Limpiar botones
+        </button>
+      </div>
+
+      {!isDebugPanelCollapsed ? (
+        <>
       <div className="internal-frame-preview__runtime">
         <strong>Configuracion</strong>
         <span>{`Core: ${trimmedCore || "sin configurar"}`}</span>
@@ -1167,6 +1284,8 @@ export function InternalRuntimeFramePreview({
         {saveRamInfo?.filePath ? <span>{saveRamInfo.filePath}</span> : null}
         {lastSaveOperation ? <span>{lastSaveOperation.message}</span> : null}
       </div>
+        </>
+      ) : null}
     </section>
   );
 }

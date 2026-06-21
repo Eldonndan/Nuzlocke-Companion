@@ -170,6 +170,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     useState<InternalFrameSnapshot | null>(null);
   const [isInternalDebugLoopRunning, setIsInternalDebugLoopRunning] =
     useState(false);
+  const [isInternalDebugPanelCollapsed, setIsInternalDebugPanelCollapsed] =
+    useState(false);
   const [frameStatus, setFrameStatus] = useState("");
   const [captureFps, setCaptureFps] = useState<CaptureFps>(30);
   const [captureSession, setCaptureSession] = useState<CaptureSessionStatus | null>(null);
@@ -1150,6 +1152,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     if (!isInternalRuntime) {
       setInternalFrameSnapshot(null);
       setIsInternalDebugLoopRunning(false);
+      setIsInternalDebugPanelCollapsed(false);
     }
   }, [isInternalRuntime]);
 
@@ -1210,7 +1213,11 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   return (
     <main
       className={
-        isInternalRuntime ? "play-screen play-screen--internal" : "play-screen"
+        isInternalRuntime
+          ? isInternalDebugPanelCollapsed
+            ? "play-screen play-screen--internal play-screen--internal-debug-collapsed"
+            : "play-screen play-screen--internal"
+          : "play-screen"
       }
     >
       <header className="play-topbar">
@@ -1391,6 +1398,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           runtimeConfig={runtimeConfig}
           onFrameSnapshot={setInternalFrameSnapshot}
           onDebugLoopRunningChange={setIsInternalDebugLoopRunning}
+          onDebugPanelCollapsedChange={setIsInternalDebugPanelCollapsed}
           keyboardTargetRef={gameplayScreenRef}
         />
       ) : null}
