@@ -14,16 +14,17 @@ type GameplayFrameProps = {
   screenRef?: RefObject<HTMLDivElement | null>;
 };
 
+type RgbaPixels = Uint8ClampedArray<ArrayBuffer>;
+
 function drawRgbaFrame(
   canvas: HTMLCanvasElement,
   width: number,
   height: number,
-  rgba: Iterable<number>,
+  rgba: RgbaPixels,
 ) {
-  const pixels = new Uint8ClampedArray(Array.from(rgba));
   const expectedLength = width * height * 4;
 
-  if (pixels.length !== expectedLength) {
+  if (rgba.length !== expectedLength) {
     return false;
   }
 
@@ -35,7 +36,7 @@ function drawRgbaFrame(
 
   canvas.width = width;
   canvas.height = height;
-  context.putImageData(new ImageData(pixels, width, height), 0, 0);
+  context.putImageData(new ImageData(rgba, width, height), 0, 0);
   return true;
 }
 

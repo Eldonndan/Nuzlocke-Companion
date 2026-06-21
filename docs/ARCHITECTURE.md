@@ -344,6 +344,16 @@ The internal Libretro debug path can now render into the main `GameplayFrame`:
 
 This keeps the legacy external emulator and capture behavior intact. The internal path still moves full RGBA buffers through explicit invokes and React state, so it is not the final streaming or optimized renderer.
 
+### Debug Render Optimization
+
+The debug renderer has a small frontend optimization pass:
+
+- `GameplayFrame` draws from `Uint8ClampedArray` directly and no longer expands RGBA buffers through `Array.from`.
+- `InternalRuntimeFramePreview` paints each snapshot immediately but stores only render metadata in its local React state.
+- The debug loop reduces message churn while batches are running.
+
+This keeps the same invoke-based RGBA snapshot flow. It does not add streaming, shared memory, WebGL, frame events, or backend changes.
+
 ### Mode-Aware Runtime UI
 
 The play screen now separates legacy external emulator controls from internal Libretro controls.

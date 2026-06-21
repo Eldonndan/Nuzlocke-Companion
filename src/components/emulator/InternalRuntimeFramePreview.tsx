@@ -32,6 +32,15 @@ import {
 
 type PreviewStatus = "idle" | "loading" | "ready" | "empty" | "error";
 
+type RenderedSnapshotMeta = {
+  width: number;
+  height: number;
+  frameNumber: number;
+  pixelFormat?: string | null;
+  isDuplicate: boolean;
+  rgbaByteLen: number;
+};
+
 type InternalRuntimeFramePreviewProps = {
   runtimeConfig: InternalLibretroRuntimeConfig;
   onFrameSnapshot?: (snapshot: InternalFrameSnapshot | null) => void;
@@ -117,7 +126,8 @@ export function InternalRuntimeFramePreview({
   const debugLoopRunningRef = useRef(false);
   const heldKeyboardKeysRef = useRef(new Set<string>());
   const heldKeyboardButtonsRef = useRef(new Set<InternalJoypadButton>());
-  const [snapshot, setSnapshot] = useState<InternalFrameSnapshot | null>(null);
+  const [renderedSnapshotMeta, setRenderedSnapshotMeta] =
+    useState<RenderedSnapshotMeta | null>(null);
   const [runtimeStatus, setRuntimeStatus] =
     useState<InternalRuntimeStatus | null>(null);
   const [inputInfo, setInputInfo] = useState<InternalInputInfo | null>(null);
@@ -202,7 +212,7 @@ export function InternalRuntimeFramePreview({
     options: { silent?: boolean } = {},
   ) => {
     if (!nextSnapshot) {
-      setSnapshot(null);
+      setRenderedSnapshotMeta(null);
       onFrameSnapshot?.(null);
       setStatus("empty");
       setMessage("No hay fotograma disponible todavia.");
@@ -234,7 +244,14 @@ export function InternalRuntimeFramePreview({
       0,
       0,
     );
-    setSnapshot(nextSnapshot);
+    setRenderedSnapshotMeta({
+      width: nextSnapshot.width,
+      height: nextSnapshot.height,
+      frameNumber: nextSnapshot.info.frameNumber,
+      pixelFormat: nextSnapshot.info.pixelFormat,
+      isDuplicate: nextSnapshot.info.isDuplicate,
+      rgbaByteLen: nextSnapshot.rgbaByteLen,
+    });
     onFrameSnapshot?.(nextSnapshot);
     if (!options.silent) {
       setStatus("ready");
@@ -418,7 +435,9 @@ export function InternalRuntimeFramePreview({
         framesRendered += renderedThisBatch;
         setDebugLoopFramesRendered(framesRendered);
         setStatus("ready");
-        setMessage(`Loop debug activo - frames: ${framesRendered}`);
+        if (framesRendered % 30 === 0) {
+          setMessage(`Loop debug activo - frames: ${framesRendered}`);
+        }
       }
 
       setStatus("ready");
@@ -756,7 +775,7 @@ export function InternalRuntimeFramePreview({
         <span>{`Batch: ${DEBUG_LOOP_BATCH_FRAMES} frames`}</span>
         <span>{`Objetivo: ${DEBUG_LOOP_TARGET_FPS} FPS`}</span>
         <span>{`Renderizados: ${debugLoopFramesRendered}`}</span>
-        <span>Debug: usa invoke + RGBA completo; no es render final.</span>
+        <span>Debug: usa invoke + RGBA completo; puede ir lento.</span>
         <div className="internal-frame-preview__loop-buttons">
           <button
             className="primary-button"
@@ -783,13 +802,17 @@ export function InternalRuntimeFramePreview({
         </div>
         <div className="internal-frame-preview__meta" aria-live="polite">
           <strong>{status === "loading" ? "Procesando..." : message}</strong>
-          {snapshot ? (
+          {renderedSnapshotMeta ? (
             <>
-              <span>{`${snapshot.width} x ${snapshot.height}`}</span>
-              <span>{`Fotograma ${snapshot.info.frameNumber}`}</span>
-              <span>{snapshot.info.pixelFormat ?? "Formato desconocido"}</span>
-              <span>{snapshot.info.isDuplicate ? "Duplicado" : "Nuevo"}</span>
-              <span>{`${snapshot.rgbaByteLen} bytes RGBA`}</span>
+              <span>{`${renderedSnapshotMeta.width} x ${renderedSnapshotMeta.height}`}</span>
+              <span>{`Fotograma ${renderedSnapshotMeta.frameNumber}`}</span>
+              <span>
+                {renderedSnapshotMeta.pixelFormat ?? "Formato desconocido"}
+              </span>
+              <span>
+                {renderedSnapshotMeta.isDuplicate ? "Duplicado" : "Nuevo"}
+              </span>
+              <span>{`${renderedSnapshotMeta.rgbaByteLen} bytes RGBA`}</span>
             </>
           ) : null}
         </div>
