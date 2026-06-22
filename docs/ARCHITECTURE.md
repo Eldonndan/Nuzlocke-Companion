@@ -405,6 +405,12 @@ The main gameplay renderer uses a two-step frame IPC path: JSON metadata via `in
 
 The older base64 snapshot and bounded batch commands remain available for debug/fallback workflows. This is still not WebGL, shared memory, a custom protocol, or the final GPU renderer, but it avoids base64/JSON payloads for the main gameplay frame.
 
+### Internal Runtime Auto Boot
+
+When an `internal-libretro` run has both a local core path and ROM path configured, the mounted internal runtime controller attempts one automatic boot for that configuration: prepare, load core, initialize core, load content, refresh save memory, load SRAM if a matching file exists, and start the native session. Missing paths skip auto boot, and failures leave the manual setup controls available.
+
+The auto boot is frontend lifecycle glue only. It does not download cores or ROMs, invent paths, create save states, or change legacy external mode. Teardown still uses the existing `stopInternalRuntime` path so SRAM autosave remains in place.
+
 ### Internal Debug Audio Drain
 
 Audio remains a debug-only Web Audio path. Libretro audio callbacks copy PCM samples into a bounded Rust buffer while the native session runs, and the internal runtime controller drains that buffer on a frontend interval while audio debug is enabled. The drain interval is independent of the Debug tab and does not depend on the old bounded frame loop.

@@ -69,8 +69,17 @@ const DEBUG_AUDIO_MAX_DRAIN_FRAMES = 8192;
 const DEBUG_AUDIO_MAX_DRAIN_ATTEMPTS = 3;
 const DEBUG_AUDIO_BACKLOG_RESET_FRAMES = 96_000;
 const DEBUG_AUDIO_MAX_LEAD_SECONDS = 0.35;
+const AUTO_START_INTERNAL_RUNTIME = true;
 
 type InternalPerformancePreset = "smooth" | "balanced" | "battery";
+
+type BootInternalRuntimeOptions = {
+  runtimeConfig: InternalLibretroRuntimeConfig;
+  loadSram: boolean;
+  startSession: boolean;
+  onStatus?: (status: InternalRuntimeStatus) => void;
+  onMessage?: (message: string) => void;
+};
 
 const performancePresetConfig: Record<
   InternalPerformancePreset,
@@ -159,6 +168,65 @@ function decodeBase64ToUint8ClampedArray(base64: string) {
   return bytes;
 }
 
+async function bootInternalRuntimeFromConfig({
+  runtimeConfig,
+  loadSram,
+  startSession,
+  onStatus,
+  onMessage,
+}: BootInternalRuntimeOptions) {
+  const core = runtimeConfig.core.trim();
+  const corePath = runtimeConfig.corePath.trim();
+  const romPath = runtimeConfig.romPath.trim();
+  const saveDirectory = runtimeConfig.saveDirectory?.trim();
+
+  if (!core || !corePath || !romPath) {
+    throw new Error("Falta configurar core, corePath o romPath.");
+  }
+
+  onMessage?.("Iniciando runtime interno...");
+  onStatus?.(
+    await prepareInternalRuntime({
+      core,
+      corePath,
+      romPath,
+      saveDirectory: saveDirectory || undefined,
+    }),
+  );
+
+  onMessage?.("Cargando core...");
+  onStatus?.(await loadInternalRuntimeCore());
+
+  onMessage?.("Inicializando core...");
+  onStatus?.(await initInternalRuntimeCore());
+
+  onMessage?.("Cargando ROM...");
+  onStatus?.(await loadInternalRuntimeGame());
+
+  onMessage?.("Actualizando memoria de guardado...");
+  const saveInfoStatus = await refreshInternalRuntimeSaveMemoryInfo();
+  onStatus?.(saveInfoStatus);
+
+  let currentStatus = saveInfoStatus;
+  const saveRamInfo = saveInfoStatus.saveMemory.find(
+    (memory) => memory.kind === "save-ram",
+  );
+
+  if (loadSram && saveRamInfo?.existsOnDisk) {
+    onMessage?.("Cargando SRAM...");
+    currentStatus = await loadInternalRuntimeSaveMemoryFromDisk("save-ram");
+    onStatus?.(currentStatus);
+  }
+
+  if (startSession) {
+    onMessage?.("Iniciando sesion interna...");
+    currentStatus = await startInternalRuntime();
+    onStatus?.(currentStatus);
+  }
+
+  return currentStatus;
+}
+
 export function InternalRuntimeFramePreview({
   runtimeConfig,
   onFrameSnapshot,
@@ -179,6 +247,8 @@ export function InternalRuntimeFramePreview({
   const isAudioDebugEnabledRef = useRef(false);
   const audioDrainIntervalRef = useRef<number | null>(null);
   const audioDrainInFlightRef = useRef(false);
+  const hasAttemptedAutoBootRef = useRef(false);
+  const autoBootConfigKeyRef = useRef("");
   const heldKeyboardKeysRef = useRef(new Set<string>());
   const heldKeyboardButtonsRef = useRef(new Set<InternalJoypadButton>());
   const [renderedSnapshotMeta, setRenderedSnapshotMeta] =
@@ -223,6 +293,9 @@ export function InternalRuntimeFramePreview({
     isAudioDebugEnabled && audioContextRef.current?.state === "running";
   const disableRuntimeLifecycleActions =
     disableLifecycleActions || isNativeSessionActive;
+  const autoBootConfigKey = `${trimmedCore}|${trimmedCorePath}|${trimmedRomPath}|${
+    trimmedSaveDirectory ?? ""
+  }`;
 
   const applyRuntimeStatus = (nextStatus: InternalRuntimeStatus) => {
     setRuntimeStatus(nextStatus);
@@ -699,6 +772,80 @@ export function InternalRuntimeFramePreview({
       "Sesion interna detenida.",
     );
   };
+
+  useEffect(() => {
+    if (autoBootConfigKeyRef.current !== autoBootConfigKey) {
+      autoBootConfigKeyRef.current = autoBootConfigKey;
+      hasAttemptedAutoBootRef.current = false;
+    }
+
+    if (
+      !AUTO_START_INTERNAL_RUNTIME ||
+      !hasPrepareConfig ||
+      hasAttemptedAutoBootRef.current
+    ) {
+      return;
+    }
+
+    let isCancelled = false;
+    hasAttemptedAutoBootRef.current = true;
+
+    const applyAutoBootStatus = (nextStatus: InternalRuntimeStatus) => {
+      if (!isCancelled) {
+        applyRuntimeStatus(nextStatus);
+      }
+    };
+
+    const applyAutoBootMessage = (nextMessage: string) => {
+      if (!isCancelled) {
+        setStatus("loading");
+        setMessage(nextMessage);
+      }
+    };
+
+    void (async () => {
+      try {
+        const currentStatus = await getInternalRuntimeStatus();
+        applyAutoBootStatus(currentStatus);
+
+        if (currentStatus.sessionInfo?.isActive) {
+          setStatus("ready");
+          setMessage("Sesion interna ya estaba activa.");
+          return;
+        }
+
+        const finalStatus = await bootInternalRuntimeFromConfig({
+          runtimeConfig,
+          loadSram: true,
+          startSession: true,
+          onStatus: applyAutoBootStatus,
+          onMessage: applyAutoBootMessage,
+        });
+
+        if (!isCancelled) {
+          setStatus("ready");
+          setMessage(
+            finalStatus.lastSaveOperation?.loaded === false
+              ? "Sesion interna iniciada. No habia SRAM para cargar."
+              : "Sesion interna iniciada.",
+          );
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setStatus("error");
+          setMessage(
+            `No se pudo iniciar automaticamente. Revisa core/ROM en Runtime. ${getErrorMessage(
+              error,
+            )}`,
+          );
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [autoBootConfigKey, hasPrepareConfig, runtimeConfig]);
 
   const startDebugRenderLoop = async () => {
     if (debugLoopRunningRef.current) {

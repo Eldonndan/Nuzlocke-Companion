@@ -109,6 +109,7 @@ Status:
 - Added a console-aware internal viewport shell for GBA and GB/GBC so the emulator canvas sits inside one aligned console screen.
 - Added a native-paced internal session loop in Rust with start/pause/resume/stop and binary RGBA frame transport for the main gameplay canvas.
 - Decoupled debug audio draining from the old frame loop so Web Audio drains the Rust PCM buffer on its own interval during native sessions.
+- Added frontend auto boot for configured internal Libretro runs so normal play no longer requires manual prepare/load/start steps.
 - Physical input, production audio pipelines, GPU/shared-memory rendering, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline
