@@ -655,6 +655,33 @@ h3 {
   color: #bdf7dc;
 }
 
+.internal-runtime-save-card {
+  display: grid;
+  flex-basis: 100%;
+  gap: 7px;
+  margin-top: 4px;
+  padding: 10px;
+  border: 1px solid rgba(168, 207, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(5, 11, 24, 0.62);
+}
+
+.internal-runtime-save-card > strong {
+  color: #bdf7dc;
+}
+
+.internal-runtime-save-card > span {
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.internal-runtime-save-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
 .gameplay-frame {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;

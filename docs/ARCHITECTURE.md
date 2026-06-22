@@ -291,6 +291,12 @@ This autosave uses the same `retro_get_memory_data` / `retro_get_memory_size` ba
 
 If no Save RAM is exposed by the core/content, teardown continues normally. If Save RAM exists but the core returns an invalid pointer or the `.srm` file cannot be written, the destructive operation is blocked so the runtime is not discarded before the error is visible.
 
+### Internal Save Flow UX
+
+The internal Runtime tab surfaces Save RAM outside the Debug panel: SRAM availability, whether the `.srm` file exists, the resolved save path, the last save/load/autosave operation, and manual refresh/load/save actions. The UI copy states that this is battery SRAM persistence, not a save state, and that the player must save inside Pokemon before SRAM contains new progress.
+
+Manual SRAM actions are disabled while the native session is active because the Rust runtime blocks save-memory access during active emulation. Stopping the internal session still runs the autosave teardown path and reports the resulting `.srm` location through `lastSaveOperation`.
+
 ### Internal Runtime Debug Lifecycle Controls
 
 The internal debug preview now accepts the run's `InternalLibretroRuntimeConfig` and exposes manual lifecycle controls for smoke testing:

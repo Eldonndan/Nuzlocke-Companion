@@ -68,7 +68,12 @@ import type {
   InternalFrameSnapshotBase64,
   InternalRuntimeStatus,
 } from "../utils/internalRuntimeCommands";
-import { stopInternalRuntime } from "../utils/internalRuntimeCommands";
+import {
+  loadInternalRuntimeSaveMemoryFromDisk,
+  refreshInternalRuntimeSaveMemoryInfo,
+  saveInternalRuntimeMemoryToDisk,
+  stopInternalRuntime,
+} from "../utils/internalRuntimeCommands";
 import {
   createDefaultLegacyExternalRuntimeConfig,
   getRunRuntimeConfig,
@@ -231,6 +236,23 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const isInternalNativeSessionActive = Boolean(
     internalRuntimeStatus?.sessionInfo?.isActive,
   );
+  const saveRamInfo = internalRuntimeStatus?.saveMemory.find(
+    (memory) => memory.kind === "save-ram",
+  );
+  const lastSaveOperation = internalRuntimeStatus?.lastSaveOperation ?? null;
+  const disableInternalSaveActions =
+    isInternalDebugLoopRunning || isInternalNativeSessionActive;
+
+  const applyInternalRuntimeStatus = (status: InternalRuntimeStatus) => {
+    setInternalRuntimeStatus(status);
+
+    if (status.lastSaveOperation?.message) {
+      const savePath = status.lastSaveOperation.filePath
+        ? ` ${status.lastSaveOperation.filePath}`
+        : "";
+      setSessionStatus(`${status.lastSaveOperation.message}${savePath}`);
+    }
+  };
 
   const ensureLegacyExternalRuntime = () => {
     if (isLegacyRuntime) {
@@ -260,7 +282,15 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     }
 
     try {
-      await stopInternalRuntime();
+      const nextStatus = await stopInternalRuntime();
+      applyInternalRuntimeStatus(nextStatus);
+
+      if (nextStatus.lastSaveOperation?.saved) {
+        setSessionStatus(
+          `Autosave SRAM completado: ${nextStatus.lastSaveOperation.filePath}`,
+        );
+      }
+
       return true;
     } catch (error) {
       setSessionStatus(
@@ -271,6 +301,50 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       return false;
     }
   };
+
+  const runInternalSaveAction = async (
+    action: () => Promise<InternalRuntimeStatus>,
+    fallbackMessage: string,
+  ) => {
+    if (disableInternalSaveActions) {
+      setSessionStatus(
+        "Deten la sesion interna antes de guardar o cargar SRAM manualmente.",
+      );
+      return;
+    }
+
+    try {
+      const nextStatus = await action();
+      applyInternalRuntimeStatus(nextStatus);
+      setSessionStatus(
+        nextStatus.lastSaveOperation?.message ?? fallbackMessage,
+      );
+    } catch (error) {
+      setSessionStatus(
+        typeof error === "string"
+          ? error
+          : "No se pudo completar la operacion de SRAM.",
+      );
+    }
+  };
+
+  const refreshInternalSaveMemory = () =>
+    runInternalSaveAction(
+      refreshInternalRuntimeSaveMemoryInfo,
+      "Memoria de guardado actualizada.",
+    );
+
+  const loadInternalSaveMemory = () =>
+    runInternalSaveAction(
+      () => loadInternalRuntimeSaveMemoryFromDisk("save-ram"),
+      "SRAM cargada.",
+    );
+
+  const saveInternalSaveMemory = () =>
+    runInternalSaveAction(
+      () => saveInternalRuntimeMemoryToDisk("save-ram"),
+      "SRAM guardada.",
+    );
 
   const getGameplayHostRect = (): HostRect | null => {
     const gameplayElement = gameplayScreenRef.current;
@@ -1468,15 +1542,80 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
                     : "Sin directorio de guardado"}
                 </span>
                 <span>
-                  Experimental: todavia usa runtime debug y snapshots por invoke.
+                  Experimental: usa sesion interna Libretro con controles de debug.
                 </span>
+                <div className="internal-runtime-save-card">
+                  <strong>Guardado SRAM</strong>
+                  <span>
+                    Esto guarda la SRAM del juego. Primero guarda dentro de
+                    Pokemon desde el menu del juego. No es save state.
+                  </span>
+                  <span>
+                    {saveRamInfo
+                      ? `Save RAM disponible · ${saveRamInfo.sizeBytes} bytes`
+                      : "Save RAM no disponible o pendiente de actualizar"}
+                  </span>
+                  <span>
+                    {saveRamInfo?.existsOnDisk
+                      ? "Archivo .srm existente"
+                      : "Archivo .srm no encontrado"}
+                  </span>
+                  <span>
+                    {saveRamInfo?.filePath
+                      ? `Ubicacion: ${saveRamInfo.filePath}`
+                      : runtimeConfig.saveDirectory
+                        ? `Directorio configurado: ${runtimeConfig.saveDirectory}`
+                        : "Sin saveDirectory: se usara la carpeta de la ROM si el core reporta SRAM."}
+                  </span>
+                  {lastSaveOperation ? (
+                    <span>
+                      {`Ultima operacion: ${lastSaveOperation.message} ${
+                        lastSaveOperation.filePath
+                          ? lastSaveOperation.filePath
+                          : ""
+                      }`}
+                    </span>
+                  ) : null}
+                  {isInternalNativeSessionActive ? (
+                    <span>
+                      Deten la sesion para guardar o cargar SRAM manualmente.
+                      Al detener se intenta autosave.
+                    </span>
+                  ) : null}
+                  <div className="internal-runtime-save-actions">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void refreshInternalSaveMemory()}
+                      disabled={disableInternalSaveActions}
+                    >
+                      Actualizar memoria
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void loadInternalSaveMemory()}
+                      disabled={disableInternalSaveActions}
+                    >
+                      Cargar SRAM
+                    </button>
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => void saveInternalSaveMemory()}
+                      disabled={disableInternalSaveActions}
+                    >
+                      Guardar SRAM
+                    </button>
+                  </div>
+                </div>
               </div>
             }
             debugController={
               <InternalRuntimeFramePreview
                 runtimeConfig={runtimeConfig}
                 onFrameSnapshotBase64={setInternalFrameSnapshotBase64}
-                onRuntimeStatusChange={setInternalRuntimeStatus}
+                onRuntimeStatusChange={applyInternalRuntimeStatus}
                 onDebugLoopRunningChange={setIsInternalDebugLoopRunning}
                 onDebugPanelCollapsedChange={setIsInternalDebugPanelCollapsed}
                 isCollapsed={internalPlayTab !== "debug"}
