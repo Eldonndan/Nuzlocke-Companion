@@ -1515,6 +1515,29 @@ h3 {
   color: #b9cbe0;
 }
 
+.library-hero {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.library-hero h2 {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+}
+
+.library-hero p {
+  max-width: 720px;
+  margin: 0;
+  color: #b9cbe0;
+}
+
+.library-hero__lead {
+  color: #f7fbff;
+  font-size: 1.05rem;
+  font-weight: 850;
+}
+
 .create-run-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1554,6 +1577,38 @@ h3 {
   font-size: 0.9rem;
   font-weight: 800;
   padding: 9px 10px;
+}
+
+.library-runtime-status-card {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(168, 207, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(5, 11, 24, 0.44);
+  padding: 12px 14px;
+}
+
+.library-runtime-status-card p {
+  margin: 0;
+  color: #b9cbe0;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.library-runtime-status-card strong {
+  display: block;
+  color: #bdf7dc;
+  font-size: 1.08rem;
+}
+
+.library-console-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
 .pokemon-game-grid {
@@ -1638,9 +1693,34 @@ h3 {
   color: #bdf7dc;
 }
 
+.pokemon-game-card__status {
+  width: fit-content;
+  border: 1px solid rgba(189, 247, 220, 0.28);
+  border-radius: 999px;
+  background: rgba(64, 198, 137, 0.13);
+  color: #bdf7dc;
+  font-size: 0.78rem;
+  font-weight: 950;
+  padding: 5px 8px;
+  text-transform: uppercase;
+}
+
+.pokemon-game-card--missing .pokemon-game-card__status {
+  border-color: rgba(255, 227, 162, 0.28);
+  background: rgba(255, 227, 162, 0.1);
+  color: #ffe3a2;
+}
+
 .pokemon-game-card__content small {
   overflow-wrap: anywhere;
   color: #c6ddf5;
+}
+
+.pokemon-game-card__hint {
+  margin: 0;
+  color: #b9cbe0;
+  font-size: 0.84rem;
+  line-height: 1.35;
 }
 
 .pokemon-game-card__meta {
@@ -1679,6 +1759,22 @@ h3 {
 .library-run-setup h2,
 .library-run-setup p {
   margin: 0;
+}
+
+.library-run-setup__summary {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(168, 207, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #b9cbe0;
+  font-size: 0.9rem;
+  font-weight: 800;
+  padding: 10px;
+}
+
+.library-run-setup__summary strong {
+  color: #f7fbff;
 }
 
 .life-preset-row {

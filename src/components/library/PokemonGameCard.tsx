@@ -21,6 +21,7 @@ export function PokemonGameCard({
   onConfigureRun,
 }: PokemonGameCardProps) {
   const hasRom = Boolean(romPath);
+  const statusLabel = hasRom ? "ROM lista" : "ROM pendiente";
   const initials = game.shortTitle
     .split(/(?=[A-Z])/)
     .map((part) => part[0])
@@ -30,6 +31,7 @@ export function PokemonGameCard({
 
   return (
     <article
+      aria-label={`${game.title}, ${getPokemonPlatformLabel(game.platform)}, ${statusLabel}`}
       className={
         hasRom
           ? `pokemon-game-card pokemon-game-card--${game.accent}`
@@ -49,14 +51,20 @@ export function PokemonGameCard({
           <span>{game.region}</span>
           <span>{game.releaseGroup}</span>
         </div>
-        <strong>{hasRom ? "ROM lista" : "ROM pendiente"}</strong>
+        <span className="pokemon-game-card__status">{statusLabel}</span>
         {romPath ? <small>{getFileNameFromPath(romPath)}</small> : null}
+        <p className="pokemon-game-card__hint">
+          {hasRom
+            ? "Listo para crear una run."
+            : "Selecciona tu archivo local para activar este juego."}
+        </p>
       </div>
       <div className="pokemon-game-card__actions">
         {hasRom ? (
           <button
             className="primary-button"
             type="button"
+            aria-label={`Configurar run de ${game.title}`}
             onClick={() => onConfigureRun(game)}
           >
             Configurar run
@@ -65,6 +73,7 @@ export function PokemonGameCard({
           <button
             className="secondary-button"
             type="button"
+            aria-label={`Asignar ROM para ${game.title}`}
             onClick={() => onAssignRom(game)}
           >
             Asignar ROM
@@ -74,6 +83,7 @@ export function PokemonGameCard({
           <button
             className="secondary-button"
             type="button"
+            aria-label={`Cambiar ROM de ${game.title}`}
             onClick={() => onAssignRom(game)}
           >
             Cambiar ROM

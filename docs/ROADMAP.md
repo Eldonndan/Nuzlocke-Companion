@@ -149,6 +149,7 @@ Status:
 - Added basic run setup with lives before creating the run.
 - Created internal Libretro runs from selected game metadata and associated ROM path.
 - Added local internal runtime preferences for `core`, `corePath`, and save directory reuse without storing a global ROM path.
+- Polished the library entry flow with a stronger hero, runtime readiness card, console tabs with counts, clearer ROM status cards, and a guided run setup summary.
 
 Future work:
 

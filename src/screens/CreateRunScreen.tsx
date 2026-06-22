@@ -81,6 +81,10 @@ function getDefaultLevelCap(game: PokemonGameCatalogEntry) {
   return getGamePackByGameName(game.title)?.defaultInitialLevelCap ?? 5;
 }
 
+function getFileNameFromPath(path: string) {
+  return path.split(/[\\/]/).pop() || "Archivo ROM asociado";
+}
+
 export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
   const defaultPack = getGamePackByGameName("Pokémon FireRed");
   const [mode, setMode] = useState<CreateRunMode>("library");
@@ -118,6 +122,18 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
         : pokemonGameCatalog.filter((game) => game.platform === platformFilter),
     [platformFilter],
   );
+  const platformCounts = useMemo(
+    () => ({
+      all: pokemonGameCatalog.length,
+      gb: pokemonGameCatalog.filter((game) => game.platform === "gb").length,
+      gbc: pokemonGameCatalog.filter((game) => game.platform === "gbc").length,
+      gba: pokemonGameCatalog.filter((game) => game.platform === "gba").length,
+    }),
+    [],
+  );
+  const internalRuntimePreferences = loadInternalRuntimePreferences();
+  const isRuntimePreferenceReady =
+    Boolean(internalRuntimePreferences?.corePath);
 
   const chooseEmulator = async () => {
     try {
@@ -164,7 +180,11 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
     }
 
     setRomLibrary(setPokemonRomPath(game.id, selectedPath));
-    setLibraryMessage(`ROM asociada para ${game.title}.`);
+    setSelectedGame(game);
+    setLibraryLives(3);
+    setLibraryMessage(
+      `ROM asociada para ${game.title}. Ya puedes configurar la run.`,
+    );
   };
 
   const openRunSetup = (game: PokemonGameCatalogEntry) => {
@@ -301,15 +321,35 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
 
       {mode === "library" ? (
         <section className="create-run-panel" aria-labelledby="library-title">
-          <div className="create-run-intro">
+          <div className="library-hero">
+            <p className="eyebrow">Biblioteca local</p>
             <h2 id="library-title">Elige un juego para comenzar una run</h2>
+            <p className="library-hero__lead">
+              Asocia tus ROMs locales una vez y crea runs sin volver a buscar
+              rutas.
+            </p>
             <p>
-              Asocia una ROM local por juego. La app no descarga, copia ni
-              incluye ROMs, cores, BIOS o caratulas oficiales.
+              La app no incluye, descarga ni copia ROMs, BIOS, cores ni
+              caratulas oficiales.
             </p>
           </div>
 
-          <div className="library-toolbar" aria-label="Filtro de consola">
+          <section
+            className="library-runtime-status-card"
+            aria-label="Estado del runtime interno"
+          >
+            <div>
+              <p className="eyebrow">Runtime interno</p>
+              <strong>{isRuntimePreferenceReady ? "Listo" : "Falta core"}</strong>
+            </div>
+            <p>
+              {isRuntimePreferenceReady
+                ? "Se reutilizara tu core mGBA guardado al crear nuevas runs."
+                : "Podras configurar el core mGBA al entrar a la run."}
+            </p>
+          </section>
+
+          <div className="library-console-tabs" aria-label="Filtrar por consola">
             {platformFilters.map((filter) => (
               <button
                 key={filter.id}
@@ -319,18 +359,13 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
                     : "secondary-button"
                 }
                 type="button"
+                aria-pressed={platformFilter === filter.id}
                 onClick={() => setPlatformFilter(filter.id)}
               >
-                {filter.label}
+                {filter.label} ({platformCounts[filter.id]})
               </button>
             ))}
           </div>
-
-          <p className="library-runtime-status">
-            {loadInternalRuntimePreferences()?.corePath
-              ? "Runtime interno listo: se reutilizara tu core mGBA guardado."
-              : "Falta configurar core mGBA: podras hacerlo al entrar a la run."}
-          </p>
 
           <div className="pokemon-game-grid">
             {filteredCatalog.map((game) => (
@@ -352,10 +387,31 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
               <div>
                 <p className="eyebrow">Configurar Nuzlocke</p>
                 <h2 id="library-run-setup-title">{selectedGame.title}</h2>
-                <p>{getPokemonPlatformLabel(selectedGame.platform)}</p>
+                <p>
+                  {getPokemonPlatformLabel(selectedGame.platform)} ·{" "}
+                  {selectedGame.generation} · {selectedGame.region}
+                </p>
+              </div>
+              <div className="library-run-setup__summary">
+                <span>
+                  ROM asociada:{" "}
+                  <strong>
+                    {getFileNameFromPath(
+                      romLibrary[selectedGame.id]?.romPath ?? "",
+                    )}
+                  </strong>
+                </span>
+                <span>
+                  Runtime:{" "}
+                  <strong>
+                    {isRuntimePreferenceReady
+                      ? "listo"
+                      : "se configurara al entrar"}
+                  </strong>
+                </span>
               </div>
               <label className="form-field">
-                <span>Vidas</span>
+                <span>Vidas iniciales</span>
                 <div className="life-preset-row">
                   {[3, 5, 10].map((preset) => (
                     <button
@@ -379,6 +435,7 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
                       setLibraryLives(Number(event.target.value))
                     }
                     aria-label="Vidas personalizadas"
+                    placeholder="Personalizado"
                   />
                 </div>
               </label>
