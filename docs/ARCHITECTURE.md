@@ -411,6 +411,8 @@ When an `internal-libretro` run has both a local core path and ROM path configur
 
 The auto boot is frontend lifecycle glue only. It does not download cores or ROMs, invent paths, create save states, or change legacy external mode. Teardown still uses the existing `stopInternalRuntime` path so SRAM autosave remains in place.
 
+The main internal display controller is enabled as soon as an internal run has configured core and ROM paths. It can wait for the first frame before the parent screen has observed an active session status, using a throttled retry path so opening a run does not require pressing "Leer estado" to wake up rendering.
+
 ### Internal Debug Audio Drain
 
 Audio remains a debug-only Web Audio path. Libretro audio callbacks copy PCM samples into a bounded Rust buffer while the native session runs, and the internal runtime controller drains that buffer on a frontend interval while audio debug is enabled. The drain interval is independent of the Debug tab and does not depend on the old bounded frame loop.

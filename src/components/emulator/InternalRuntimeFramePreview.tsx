@@ -821,11 +821,14 @@ export function InternalRuntimeFramePreview({
           onStatus: applyAutoBootStatus,
           onMessage: applyAutoBootMessage,
         });
+        const syncedStatus = await getInternalRuntimeStatus();
+        applyAutoBootStatus(syncedStatus);
 
         if (!isCancelled) {
           setStatus("ready");
           setMessage(
-            finalStatus.lastSaveOperation?.loaded === false
+            syncedStatus.lastSaveOperation?.loaded === false ||
+              finalStatus.lastSaveOperation?.loaded === false
               ? "Sesion interna iniciada. No habia SRAM para cargar."
               : "Sesion interna iniciada.",
           );

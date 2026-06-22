@@ -5,9 +5,13 @@ import {
   type InternalFrameInfo,
 } from "../../utils/internalRuntimeCommands";
 
+const NO_FRAME_RETRY_MS = 120;
+const WAITING_STATUS_UPDATE_MS = 500;
+
 type InternalRuntimeDisplayControllerProps = {
   canvas: HTMLCanvasElement | null;
   isEnabled: boolean;
+  isSessionActive?: boolean;
   onFrameInfo?: (frameInfo: InternalFrameInfo) => void;
   onRenderStatus?: (status: string) => void;
 };
@@ -53,16 +57,32 @@ function paintRgbaFrame(
 export function InternalRuntimeDisplayController({
   canvas,
   isEnabled,
+  isSessionActive = false,
   onFrameInfo,
   onRenderStatus,
 }: InternalRuntimeDisplayControllerProps) {
   const lastFrameNumberRef = useRef(0);
+  const lastNoFrameAttemptAtRef = useRef(0);
+  const lastWaitingStatusAtRef = useRef(0);
   const requestInFlightRef = useRef(false);
   const statsRef = useRef<RenderStats>({
     paintedFrames: 0,
     startedAt: performance.now(),
     lastUiUpdateAt: 0,
   });
+
+  useEffect(() => {
+    lastFrameNumberRef.current = 0;
+    lastNoFrameAttemptAtRef.current = 0;
+    lastWaitingStatusAtRef.current = 0;
+    requestInFlightRef.current = false;
+    statsRef.current = {
+      paintedFrames: 0,
+      startedAt: performance.now(),
+      lastUiUpdateAt: 0,
+    };
+  }, [canvas, isEnabled]);
+
   useEffect(() => {
     if (!canvas || !isEnabled) {
       return;
@@ -77,6 +97,19 @@ export function InternalRuntimeDisplayController({
       }
 
       if (!requestInFlightRef.current) {
+        const now = performance.now();
+        const isWaitingForFirstFrame = lastFrameNumberRef.current === 0;
+
+        if (
+          !isSessionActive &&
+          isWaitingForFirstFrame &&
+          now - lastNoFrameAttemptAtRef.current < NO_FRAME_RETRY_MS
+        ) {
+          frameId = window.requestAnimationFrame(tick);
+          return;
+        }
+
+        lastNoFrameAttemptAtRef.current = now;
         requestInFlightRef.current = true;
         try {
           const frameInfo = await getLatestInternalRuntimeFrameInfo();
@@ -106,7 +139,14 @@ export function InternalRuntimeDisplayController({
             statsRef.current.lastUiUpdateAt = now;
           }
         } catch {
-          // No frame may be available yet. Keep RAF alive without spamming UI.
+          const retryNow = performance.now();
+          if (
+            lastFrameNumberRef.current === 0 &&
+            retryNow - lastWaitingStatusAtRef.current >= WAITING_STATUS_UPDATE_MS
+          ) {
+            onRenderStatus?.("Render interno: esperando primer frame...");
+            lastWaitingStatusAtRef.current = retryNow;
+          }
         } finally {
           requestInFlightRef.current = false;
         }
@@ -123,7 +163,7 @@ export function InternalRuntimeDisplayController({
         window.cancelAnimationFrame(frameId);
       }
     };
-  }, [canvas, isEnabled, onFrameInfo, onRenderStatus]);
+  }, [canvas, isEnabled, isSessionActive, onFrameInfo, onRenderStatus]);
 
   return null;
 }

@@ -1487,7 +1487,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           />
           <InternalRuntimeDisplayController
             canvas={internalCanvas}
-            isEnabled={isInternalRuntime && isInternalNativeSessionActive}
+            isEnabled={isInternalRuntime && hasInternalRuntimeConfigured}
+            isSessionActive={isInternalNativeSessionActive}
             onFrameInfo={setInternalFrameInfo}
             onRenderStatus={setFrameStatus}
           />
