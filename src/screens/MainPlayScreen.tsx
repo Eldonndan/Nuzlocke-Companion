@@ -72,6 +72,7 @@ import type {
   InternalRuntimeStatus,
 } from "../utils/internalRuntimeCommands";
 import {
+  clearInternalRuntimeJoypadButtons,
   loadInternalRuntimeSaveMemoryFromDisk,
   pauseInternalRuntime,
   refreshInternalRuntimeSaveMemoryInfo,
@@ -80,6 +81,7 @@ import {
   startInternalRuntime,
   stopInternalRuntime,
 } from "../utils/internalRuntimeCommands";
+import { keyboardControlHints } from "../utils/internalInputMapping";
 import {
   createDefaultLegacyExternalRuntimeConfig,
   getRunRuntimeConfig,
@@ -203,6 +205,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     useState(false);
   const [internalAudioStateLabel, setInternalAudioStateLabel] =
     useState("Audio: armado");
+  const [isInternalKeyboardFocused, setIsInternalKeyboardFocused] =
+    useState(false);
   const [internalPlayTab, setInternalPlayTab] =
     useState<InternalPlayTab>("runtime");
   const [frameStatus, setFrameStatus] = useState("");
@@ -407,6 +411,20 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
         typeof error === "string"
           ? error
           : "No se pudo cambiar el audio interno.",
+      );
+    }
+  };
+
+  const clearInternalHeldButtons = async () => {
+    try {
+      const nextStatus = await clearInternalRuntimeJoypadButtons();
+      applyInternalRuntimeStatus(nextStatus);
+      setSessionStatus("Botones soltados.");
+    } catch (error) {
+      setSessionStatus(
+        typeof error === "string"
+          ? error
+          : "No se pudieron soltar los botones.",
       );
     }
   };
@@ -1697,6 +1715,43 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
 
                 <section className="internal-runtime-panel__section">
                   <div>
+                    <p className="eyebrow">Controles</p>
+                    <h3>Teclado</h3>
+                  </div>
+                  <div className="internal-keyboard-status">
+                    <strong>
+                      {isInternalKeyboardFocused
+                        ? "Teclado activo"
+                        : "Haz click en el juego"}
+                    </strong>
+                    <span>
+                      Los controles solo funcionan cuando el cuadro de juego
+                      tiene foco. No se usan atajos globales.
+                    </span>
+                  </div>
+                  <div className="internal-controls-grid">
+                    {keyboardControlHints.map((hint) => (
+                      <div className="internal-controls-grid__row" key={hint.label}>
+                        <span className="internal-control-key">{hint.keys}</span>
+                        <span className="internal-control-action">
+                          {hint.action}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="internal-runtime-panel__actions">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void clearInternalHeldButtons()}
+                    >
+                      Soltar botones
+                    </button>
+                  </div>
+                </section>
+
+                <section className="internal-runtime-panel__section">
+                  <div>
                     <p className="eyebrow">Guardado</p>
                     <h3>SRAM</h3>
                   </div>
@@ -1774,6 +1829,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
                 onFrameSnapshotBase64={setInternalFrameSnapshotBase64}
                 onRuntimeStatusChange={applyInternalRuntimeStatus}
                 onAudioStateChange={setInternalAudioStateLabel}
+                onKeyboardFocusChange={setIsInternalKeyboardFocused}
                 onDebugLoopRunningChange={setIsInternalDebugLoopRunning}
                 onDebugPanelCollapsedChange={setIsInternalDebugPanelCollapsed}
                 isCollapsed={internalPlayTab !== "debug"}

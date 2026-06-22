@@ -60,6 +60,7 @@ type InternalRuntimeFramePreviewProps = {
   onDebugLoopRunningChange?: (isRunning: boolean) => void;
   onRuntimeStatusChange?: (status: InternalRuntimeStatus) => void;
   onAudioStateChange?: (label: string) => void;
+  onKeyboardFocusChange?: (isFocused: boolean) => void;
   onDebugPanelCollapsedChange?: (collapsed: boolean) => void;
   isCollapsed?: boolean;
   showCollapseToggle?: boolean;
@@ -246,6 +247,7 @@ export const InternalRuntimeFramePreview = forwardRef<
   onDebugLoopRunningChange,
   onRuntimeStatusChange,
   onAudioStateChange,
+  onKeyboardFocusChange,
   onDebugPanelCollapsedChange,
   isCollapsed,
   showCollapseToggle = true,
@@ -1159,6 +1161,7 @@ export const InternalRuntimeFramePreview = forwardRef<
     }
 
     setIsKeyboardFocused(false);
+    onKeyboardFocusChange?.(false);
     void releaseHeldKeyboardButtons();
   };
 
@@ -1171,6 +1174,7 @@ export const InternalRuntimeFramePreview = forwardRef<
 
     const handleTargetFocus = () => {
       setIsKeyboardFocused(true);
+      onKeyboardFocusChange?.(true);
     };
     const handleTargetUserGesture = () => {
       tryEnableAudioFromUserGesture();
@@ -1199,6 +1203,7 @@ export const InternalRuntimeFramePreview = forwardRef<
       }
 
       setIsKeyboardFocused(false);
+      onKeyboardFocusChange?.(false);
       void releaseHeldKeyboardButtons();
     };
 
@@ -1215,7 +1220,7 @@ export const InternalRuntimeFramePreview = forwardRef<
       keyboardTarget.removeEventListener("keyup", handleTargetKeyUp);
       keyboardTarget.removeEventListener("blur", handleTargetBlur);
     };
-  }, [isAudioAutoArmed, keyboardTargetRef]);
+  }, [isAudioAutoArmed, keyboardTargetRef, onKeyboardFocusChange]);
 
   useEffect(() => {
     onDebugPanelCollapsedChange?.(effectiveDebugPanelCollapsed);
@@ -1252,7 +1257,10 @@ export const InternalRuntimeFramePreview = forwardRef<
       className={previewClassName}
       aria-label="Vista previa interna"
       tabIndex={0}
-      onFocus={() => setIsKeyboardFocused(true)}
+      onFocus={() => {
+        setIsKeyboardFocused(true);
+        onKeyboardFocusChange?.(true);
+      }}
       onBlur={handleKeyboardBlur}
       onKeyDown={handleKeyboardKeyDown}
       onKeyUp={handleKeyboardKeyUp}

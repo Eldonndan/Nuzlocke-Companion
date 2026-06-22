@@ -460,6 +460,12 @@ The internal play screen treats the Runtime tab as the normal gameplay control s
 
 The former Debug tab is labeled Avanzado and keeps manual setup, frame stepping, batch tests, detailed metadata, and diagnostic controls. The underlying controller remains mounted across tabs so auto boot, scoped keyboard input, auto-armed audio, status updates, and autosave coordination continue to work. This is a frontend organization change only; the Rust runtime and legacy external mode are unchanged.
 
+### Internal Keyboard Controls UX
+
+Internal keyboard input remains scoped to the gameplay frame and the internal runtime panel. There are no global keyboard listeners. The Runtime tab now shows the current mapping for D-pad, A/B, Start, Select, L/R, and X/Y, plus whether the gameplay frame currently has keyboard focus.
+
+The UI exposes a "Soltar botones" action to clear retained Joypad state if focus is lost at an awkward moment. This prepares the UX surface for future rebinding or physical gamepad support, but those features are intentionally not implemented yet.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

@@ -705,6 +705,57 @@ h3 {
   gap: 8px;
 }
 
+.internal-keyboard-status {
+  display: grid;
+  gap: 4px;
+  padding: 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.internal-keyboard-status > strong {
+  color: #bdf7dc;
+}
+
+.internal-keyboard-status > span {
+  color: #b8cbe2;
+  line-height: 1.35;
+}
+
+.internal-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 7px;
+}
+
+.internal-controls-grid__row {
+  display: grid;
+  grid-template-columns: minmax(56px, auto) 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.internal-control-key {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 38px;
+  border: 1px solid rgba(168, 207, 255, 0.28);
+  border-radius: 6px;
+  padding: 2px 6px;
+  background: rgba(5, 11, 24, 0.72);
+  color: #f5fbff;
+  font-weight: 900;
+}
+
+.internal-control-action {
+  color: #c6ddf5;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
 .internal-runtime-save-card {
   display: grid;
   flex-basis: 100%;

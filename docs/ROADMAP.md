@@ -114,6 +114,7 @@ Status:
 - Auto-armed debug audio so a gameplay-frame click or key press can enable Web Audio without opening the debug panel first.
 - Promoted SRAM refresh/load/save state into the Runtime tab with clear save-state warnings and autosave status.
 - Polished the internal playable shell so Runtime is the primary game control tab and advanced diagnostics stay behind Avanzado.
+- Surfaced the default scoped keyboard controls in Runtime with focus state and a retained-button clear action.
 - Physical input, production audio pipelines, GPU/shared-memory rendering, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline
