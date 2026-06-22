@@ -8,6 +8,7 @@ import type {
   RunState,
   RuntimeConfig,
 } from "../shared/types";
+import type { BadgeIconKey } from "../shared/visualTypes";
 import { migrateLegacyEmulatorConfig } from "./runtimeConfig";
 
 const RUN_STORAGE_KEY = "nuzlocke-companion.current-run";
@@ -158,9 +159,34 @@ function isBadge(value: unknown): value is Badge {
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.name === "string" &&
+    (value.iconKey === undefined || isBadgeIconKey(value.iconKey)) &&
     optionalString(value.leaderName) &&
     optionalNumber(value.levelCap) &&
     typeof value.obtained === "boolean"
+  );
+}
+
+function isBadgeIconKey(value: unknown): value is BadgeIconKey {
+  return (
+    typeof value === "string" &&
+    [
+      "rock",
+      "water",
+      "electric",
+      "grass",
+      "poison",
+      "psychic",
+      "fire",
+      "earth",
+      "flying",
+      "bug",
+      "normal",
+      "ghost",
+      "fighting",
+      "steel",
+      "ice",
+      "dragon",
+    ].includes(value)
   );
 }
 

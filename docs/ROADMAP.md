@@ -151,6 +151,7 @@ Status:
 - Added local internal runtime preferences for `core`, `corePath`, and save directory reuse without storing a global ROM path.
 - Polished the library entry flow with a stronger hero, runtime readiness card, console tabs with counts, clearer ROM status cards, and a guided run setup summary.
 - Aligned the Pokemon catalog with basic run data by resolving game packs through stable `gameId` values and adding badge sets for every GB/GBC/GBA catalog game.
+- Added original SVG/CSS visuals for console icons, game cover cards, and themed badge icons without official assets.
 
 Future work:
 

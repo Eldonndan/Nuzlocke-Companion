@@ -2,6 +2,7 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { sampleRun } from "../data/sampleRun";
 import type { OverlayAction, RunState } from "../shared/types";
+import { BadgeIcon } from "../components/visuals/BadgeIcon";
 import { captureStatusLabels } from "../utils/captureStatusLabels";
 import { loadSavedRun } from "../utils/runStorage";
 
@@ -121,7 +122,11 @@ export function OverlayScreen() {
                 key={badge.id}
                 title={badge.name}
               >
-                {index + 1}
+                {badge.iconKey ? (
+                  <BadgeIcon iconKey={badge.iconKey} obtained={badge.obtained} />
+                ) : (
+                  index + 1
+                )}
               </i>
             ))}
           </div>

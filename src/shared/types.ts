@@ -1,3 +1,5 @@
+import type { BadgeIconKey } from "./visualTypes";
+
 export type AppScreen = "home" | "create-run" | "play";
 
 export type CaptureStatus = "available" | "used" | "failed" | "not-applicable";
@@ -113,6 +115,7 @@ export type PokemonSlot = {
 export type Badge = {
   id: string;
   name: string;
+  iconKey?: BadgeIconKey;
   leaderName?: string;
   levelCap?: number;
   obtained: boolean;

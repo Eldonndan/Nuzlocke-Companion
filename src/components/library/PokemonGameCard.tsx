@@ -2,6 +2,7 @@ import {
   getPokemonPlatformLabel,
   type PokemonGameCatalogEntry,
 } from "../../data/pokemonGameCatalog";
+import { GameCover } from "../visuals/GameCover";
 
 type PokemonGameCardProps = {
   game: PokemonGameCatalogEntry;
@@ -22,12 +23,6 @@ export function PokemonGameCard({
 }: PokemonGameCardProps) {
   const hasRom = Boolean(romPath);
   const statusLabel = hasRom ? "ROM lista" : "ROM pendiente";
-  const initials = game.shortTitle
-    .split(/(?=[A-Z])/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 3)
-    .toUpperCase();
 
   return (
     <article
@@ -38,9 +33,15 @@ export function PokemonGameCard({
           : "pokemon-game-card pokemon-game-card--missing"
       }
     >
-      <div className="pokemon-game-card__mark" aria-hidden="true">
-        {initials}
-      </div>
+      <GameCover
+        title={game.title}
+        shortTitle={game.shortTitle}
+        platform={game.platform}
+        generation={game.generation}
+        region={game.region}
+        accent={game.accent}
+        isConfigured={hasRom}
+      />
       <div className="pokemon-game-card__content">
         <div>
           <p className="eyebrow">{getPokemonPlatformLabel(game.platform)}</p>

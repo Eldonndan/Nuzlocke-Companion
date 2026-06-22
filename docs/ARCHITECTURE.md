@@ -498,6 +498,8 @@ The library UI is the main product entry point for new runs. It presents console
 
 The visual catalog and run data are separate layers. Catalog entries provide the user-facing game list, while game packs provide basic run data such as badges and an initial level cap. Library-created runs resolve game packs by stable `gameId` first, with title matching kept only as compatibility fallback for older/manual flows. Detailed route data is intentionally out of scope for this milestone.
 
+Library visuals are app-owned React/SVG/CSS artwork. Console icons, game cover cards, and badge icons are simple original interface elements derived from platform, region, generation, accent, and badge theme metadata. They do not use official box art, logos, sprites, screenshots, medal designs, or downloaded assets.
+
 ### Internal Runtime Local Preferences
 
 The app stores local internal runtime preferences separately from the Pokemon ROM library. These preferences include the selected Libretro core target, local core path, and optional save directory. They never include a global ROM path; ROMs remain associated per game through `gameId -> romPath`.
