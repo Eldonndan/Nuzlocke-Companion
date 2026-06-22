@@ -2,7 +2,10 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { EmulatorConfigPanel } from "../components/emulator/EmulatorConfigPanel";
 import { InternalRuntimeDisplayController } from "../components/emulator/InternalRuntimeDisplayController";
-import { InternalRuntimeFramePreview } from "../components/emulator/InternalRuntimeFramePreview";
+import {
+  InternalRuntimeFramePreview,
+  type InternalRuntimeFramePreviewHandle,
+} from "../components/emulator/InternalRuntimeFramePreview";
 import { QuickEditPanel } from "../components/edit/QuickEditPanel";
 import {
   GameplayFrame,
@@ -70,8 +73,11 @@ import type {
 } from "../utils/internalRuntimeCommands";
 import {
   loadInternalRuntimeSaveMemoryFromDisk,
+  pauseInternalRuntime,
   refreshInternalRuntimeSaveMemoryInfo,
+  resumeInternalRuntime,
   saveInternalRuntimeMemoryToDisk,
+  startInternalRuntime,
   stopInternalRuntime,
 } from "../utils/internalRuntimeCommands";
 import {
@@ -195,6 +201,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     useState(false);
   const [isInternalDebugPanelCollapsed, setIsInternalDebugPanelCollapsed] =
     useState(false);
+  const [internalAudioStateLabel, setInternalAudioStateLabel] =
+    useState("Audio: armado");
   const [internalPlayTab, setInternalPlayTab] =
     useState<InternalPlayTab>("runtime");
   const [frameStatus, setFrameStatus] = useState("");
@@ -211,6 +219,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const hasSavedInitialRun = useRef(false);
   const isTestFrameRequestInFlight = useRef(false);
   const gameplayScreenRef = useRef<HTMLDivElement | null>(null);
+  const internalRuntimePreviewRef =
+    useRef<InternalRuntimeFramePreviewHandle | null>(null);
   const dockResizeTimeoutRef = useRef<number | null>(null);
   const dockedWindowIdRef = useRef<string | null>(null);
 
@@ -236,6 +246,14 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const isInternalNativeSessionActive = Boolean(
     internalRuntimeStatus?.sessionInfo?.isActive,
   );
+  const isInternalNativeSessionPaused = Boolean(
+    internalRuntimeStatus?.sessionInfo?.isPaused,
+  );
+  const internalSessionLabel = isInternalNativeSessionActive
+    ? isInternalNativeSessionPaused
+      ? "Pausada"
+      : "Activa"
+    : "Detenida";
   const saveRamInfo = internalRuntimeStatus?.saveMemory.find(
     (memory) => memory.kind === "save-ram",
   );
@@ -324,6 +342,71 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
         typeof error === "string"
           ? error
           : "No se pudo completar la operacion de SRAM.",
+      );
+    }
+  };
+
+  const runInternalSessionAction = async (
+    action: () => Promise<InternalRuntimeStatus>,
+    successMessage: string,
+  ) => {
+    try {
+      const nextStatus = await action();
+      applyInternalRuntimeStatus(nextStatus);
+      setSessionStatus(successMessage);
+    } catch (error) {
+      setSessionStatus(
+        typeof error === "string"
+          ? error
+          : "No se pudo cambiar la sesion interna.",
+      );
+    }
+  };
+
+  const startInternalSession = () =>
+    runInternalSessionAction(startInternalRuntime, "Sesion interna iniciada.");
+
+  const pauseInternalSession = () =>
+    runInternalSessionAction(pauseInternalRuntime, "Sesion interna pausada.");
+
+  const resumeInternalSession = () =>
+    runInternalSessionAction(resumeInternalRuntime, "Sesion interna continuada.");
+
+  const stopInternalSession = async () => {
+    try {
+      const nextStatus = await stopInternalRuntime();
+      applyInternalRuntimeStatus(nextStatus);
+      if (nextStatus.lastSaveOperation?.saved) {
+        setSessionStatus(
+          `Autosave SRAM completado: ${nextStatus.lastSaveOperation.filePath}`,
+        );
+      } else {
+        setSessionStatus("Sesion interna detenida.");
+      }
+    } catch (error) {
+      setSessionStatus(
+        typeof error === "string"
+          ? error
+          : "No se pudo detener la sesion interna.",
+      );
+    }
+  };
+
+  const toggleInternalAudio = async () => {
+    try {
+      if (internalAudioStateLabel === "Audio: activo") {
+        await internalRuntimePreviewRef.current?.disableAudioDebug();
+        setSessionStatus("Audio apagado.");
+        return;
+      }
+
+      await internalRuntimePreviewRef.current?.enableAudioDebug();
+      setSessionStatus("Audio activo.");
+    } catch (error) {
+      setSessionStatus(
+        typeof error === "string"
+          ? error
+          : "No se pudo cambiar el audio interno.",
       );
     }
   };
@@ -1471,9 +1554,9 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
         {isInternalRuntime ? (
           <>
             <strong>Modo interno Libretro</strong>
-            <span>El juego se renderiza dentro de la app usando tu core local.</span>
-            <span>Usa la preview debug para preparar, iniciar el loop y guardar SRAM.</span>
-            <span>Haz click en el juego para activar teclado local.</span>
+            <span>El juego se inicia automaticamente con tu core local.</span>
+            <span>Haz click en el juego para activar teclado y audio.</span>
+            <span>Guarda dentro del juego antes de guardar SRAM.</span>
           </>
         ) : (
           <>
@@ -1532,57 +1615,130 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
               </div>
             }
             runtimePanel={
-              <div className="internal-runtime-summary">
-                <strong>Runtime interno</strong>
-                <span>{runtimeConfig.corePath ? "Core configurado" : "Sin core"}</span>
-                <span>{runtimeConfig.romPath ? "ROM configurada" : "Sin ROM"}</span>
-                <span>
-                  {runtimeConfig.saveDirectory
-                    ? "Directorio de guardado configurado"
-                    : "Sin directorio de guardado"}
-                </span>
-                <span>
-                  Experimental: usa sesion interna Libretro con controles de debug.
-                </span>
-                <div className="internal-runtime-save-card">
-                  <strong>Guardado SRAM</strong>
-                  <span>
+              <div className="internal-runtime-panel">
+                <section className="internal-runtime-panel__section">
+                  <div>
+                    <p className="eyebrow">Sesion</p>
+                    <h3>Runtime interno</h3>
+                  </div>
+                  <div className="internal-runtime-state-card">
+                    <strong>{internalSessionLabel}</strong>
+                    <span>{`FPS render: ${frameStatus || "esperando frame"}`}</span>
+                    <span>{runtimeConfig.corePath ? "Core configurado" : "Sin core"}</span>
+                    <span>{runtimeConfig.romPath ? "ROM configurada" : "Sin ROM"}</span>
+                    <span>{internalAudioStateLabel}</span>
+                  </div>
+                  <div className="internal-runtime-panel__actions">
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => void startInternalSession()}
+                      disabled={
+                        !hasInternalRuntimeConfigured ||
+                        isInternalNativeSessionActive
+                      }
+                    >
+                      Iniciar
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void pauseInternalSession()}
+                      disabled={
+                        !isInternalNativeSessionActive ||
+                        isInternalNativeSessionPaused
+                      }
+                    >
+                      Pausar
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void resumeInternalSession()}
+                      disabled={
+                        !isInternalNativeSessionActive ||
+                        !isInternalNativeSessionPaused
+                      }
+                    >
+                      Continuar
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void stopInternalSession()}
+                      disabled={!isInternalNativeSessionActive}
+                    >
+                      Detener
+                    </button>
+                  </div>
+                </section>
+
+                <section className="internal-runtime-panel__section">
+                  <div>
+                    <p className="eyebrow">Audio</p>
+                    <h3>Sonido</h3>
+                  </div>
+                  <div className="internal-runtime-state-card">
+                    <strong>{internalAudioStateLabel}</strong>
+                    <span>Haz click en el juego para activar audio automaticamente.</span>
+                  </div>
+                  <div className="internal-runtime-panel__actions">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void toggleInternalAudio()}
+                    >
+                      {internalAudioStateLabel === "Audio: activo"
+                        ? "Desactivar audio"
+                        : "Activar audio"}
+                    </button>
+                  </div>
+                </section>
+
+                <section className="internal-runtime-panel__section">
+                  <div>
+                    <p className="eyebrow">Guardado</p>
+                    <h3>SRAM</h3>
+                  </div>
+                  <p>
                     Esto guarda la SRAM del juego. Primero guarda dentro de
                     Pokemon desde el menu del juego. No es save state.
-                  </span>
-                  <span>
-                    {saveRamInfo
-                      ? `Save RAM disponible · ${saveRamInfo.sizeBytes} bytes`
-                      : "Save RAM no disponible o pendiente de actualizar"}
-                  </span>
-                  <span>
-                    {saveRamInfo?.existsOnDisk
-                      ? "Archivo .srm existente"
-                      : "Archivo .srm no encontrado"}
-                  </span>
-                  <span>
-                    {saveRamInfo?.filePath
-                      ? `Ubicacion: ${saveRamInfo.filePath}`
-                      : runtimeConfig.saveDirectory
-                        ? `Directorio configurado: ${runtimeConfig.saveDirectory}`
-                        : "Sin saveDirectory: se usara la carpeta de la ROM si el core reporta SRAM."}
-                  </span>
-                  {lastSaveOperation ? (
+                  </p>
+                  <div className="internal-runtime-state-card">
+                    <strong>
+                      {saveRamInfo
+                        ? `Disponible · ${saveRamInfo.sizeBytes} bytes`
+                        : "Pendiente de actualizar"}
+                    </strong>
                     <span>
-                      {`Ultima operacion: ${lastSaveOperation.message} ${
-                        lastSaveOperation.filePath
-                          ? lastSaveOperation.filePath
-                          : ""
-                      }`}
+                      {saveRamInfo?.existsOnDisk
+                        ? "Archivo .srm existente"
+                        : "Archivo .srm no encontrado"}
                     </span>
-                  ) : null}
-                  {isInternalNativeSessionActive ? (
                     <span>
-                      Deten la sesion para guardar o cargar SRAM manualmente.
-                      Al detener se intenta autosave.
+                      {saveRamInfo?.filePath
+                        ? `Ubicacion: ${saveRamInfo.filePath}`
+                        : runtimeConfig.saveDirectory
+                          ? `Directorio configurado: ${runtimeConfig.saveDirectory}`
+                          : "Sin saveDirectory: se usara la carpeta de la ROM si el core reporta SRAM."}
                     </span>
-                  ) : null}
-                  <div className="internal-runtime-save-actions">
+                    {lastSaveOperation ? (
+                      <span>
+                        {`Ultima operacion: ${lastSaveOperation.message} ${
+                          lastSaveOperation.filePath
+                            ? lastSaveOperation.filePath
+                            : ""
+                        }`}
+                      </span>
+                    ) : null}
+                    {isInternalNativeSessionActive ? (
+                      <span>
+                        Deten la sesion para guardar o cargar SRAM manualmente.
+                        Al detener se intenta autosave.
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="internal-runtime-panel__actions">
                     <button
                       className="secondary-button"
                       type="button"
@@ -1608,14 +1764,16 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
                       Guardar SRAM
                     </button>
                   </div>
-                </div>
+                </section>
               </div>
             }
             debugController={
               <InternalRuntimeFramePreview
+                ref={internalRuntimePreviewRef}
                 runtimeConfig={runtimeConfig}
                 onFrameSnapshotBase64={setInternalFrameSnapshotBase64}
                 onRuntimeStatusChange={applyInternalRuntimeStatus}
+                onAudioStateChange={setInternalAudioStateLabel}
                 onDebugLoopRunningChange={setIsInternalDebugLoopRunning}
                 onDebugPanelCollapsedChange={setIsInternalDebugPanelCollapsed}
                 isCollapsed={internalPlayTab !== "debug"}
@@ -1654,6 +1812,15 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
             <span>Runtime interno Libretro</span>
             <span>{runtimeConfig.corePath ? "Core configurado" : "sin core"}</span>
             <span>{runtimeConfig.romPath ? "ROM configurada" : "sin ROM"}</span>
+            <span>{`Sesion: ${internalSessionLabel.toLowerCase()}`}</span>
+            <span>{internalAudioStateLabel}</span>
+            {lastSaveOperation ? (
+              <span>{`Guardado: ${lastSaveOperation.message}`}</span>
+            ) : (
+              <span>
+                {saveRamInfo ? "SRAM disponible" : "SRAM pendiente"}
+              </span>
+            )}
             <span>
               {runtimeConfig.saveDirectory
                 ? "Directorio de guardado configurado"
@@ -1661,8 +1828,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
             </span>
             {isInternalDebugLoopRunning ? (
               <strong>
-                Sesion interna experimental activa: detenla antes de cambiar
-                runtime, resetear o salir.
+                Prueba avanzada activa: detenla antes de cambiar runtime,
+                resetear o salir.
               </strong>
             ) : null}
             {isInternalNativeSessionActive ? (

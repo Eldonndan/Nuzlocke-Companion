@@ -454,6 +454,12 @@ The play screen now separates legacy external emulator controls from internal Li
 
 This is a frontend UX cleanup only. It does not change the Rust host, add commands, implement audio, or make `internal_runtime_start` the final gameplay loop.
 
+### Internal Playable UX Shell
+
+The internal play screen treats the Runtime tab as the normal gameplay control surface. It shows session state, configured core/ROM, render status, audio state, SRAM state, and the primary actions for pause, resume, stop, audio, and manual SRAM refresh/load/save. User-facing copy avoids implementation terms such as snapshots or invokes in this main path.
+
+The former Debug tab is labeled Avanzado and keeps manual setup, frame stepping, batch tests, detailed metadata, and diagnostic controls. The underlying controller remains mounted across tabs so auto boot, scoped keyboard input, auto-armed audio, status updates, and autosave coordination continue to work. This is a frontend organization change only; the Rust runtime and legacy external mode are unchanged.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

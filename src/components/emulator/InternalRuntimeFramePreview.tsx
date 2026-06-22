@@ -2,7 +2,9 @@ import {
   type FocusEvent,
   type KeyboardEvent,
   type RefObject,
+  forwardRef,
   useEffect,
+  useImperativeHandle,
   useRef,
   useState,
 } from "react";
@@ -57,10 +59,16 @@ type InternalRuntimeFramePreviewProps = {
   onFrameSnapshotBase64?: (snapshot: InternalFrameSnapshotBase64 | null) => void;
   onDebugLoopRunningChange?: (isRunning: boolean) => void;
   onRuntimeStatusChange?: (status: InternalRuntimeStatus) => void;
+  onAudioStateChange?: (label: string) => void;
   onDebugPanelCollapsedChange?: (collapsed: boolean) => void;
   isCollapsed?: boolean;
   showCollapseToggle?: boolean;
   keyboardTargetRef?: RefObject<HTMLElement | null>;
+};
+
+export type InternalRuntimeFramePreviewHandle = {
+  enableAudioDebug: () => Promise<void>;
+  disableAudioDebug: () => Promise<void>;
 };
 
 const DEBUG_LOOP_TARGET_FPS = 60;
@@ -228,17 +236,21 @@ async function bootInternalRuntimeFromConfig({
   return currentStatus;
 }
 
-export function InternalRuntimeFramePreview({
+export const InternalRuntimeFramePreview = forwardRef<
+  InternalRuntimeFramePreviewHandle,
+  InternalRuntimeFramePreviewProps
+>(function InternalRuntimeFramePreview({
   runtimeConfig,
   onFrameSnapshot,
   onFrameSnapshotBase64,
   onDebugLoopRunningChange,
   onRuntimeStatusChange,
+  onAudioStateChange,
   onDebugPanelCollapsedChange,
   isCollapsed,
   showCollapseToggle = true,
   keyboardTargetRef,
-}: InternalRuntimeFramePreviewProps) {
+}: InternalRuntimeFramePreviewProps, ref) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const debugLoopCancelRequestedRef = useRef(false);
@@ -620,6 +632,19 @@ export function InternalRuntimeFramePreview({
       setAudioDebugMessage(getErrorMessage(error));
     }
   };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      enableAudioDebug,
+      disableAudioDebug,
+    }),
+    [enableAudioDebug, disableAudioDebug],
+  );
+
+  useEffect(() => {
+    onAudioStateChange?.(audioStateLabel);
+  }, [audioStateLabel, onAudioStateChange]);
 
   const tryEnableAudioFromUserGesture = () => {
     if (
@@ -1234,8 +1259,8 @@ export function InternalRuntimeFramePreview({
     >
       <div className="internal-frame-preview__header">
         <div>
-          <p className="eyebrow">Runtime interno</p>
-          <h2>Vista previa de fotograma</h2>
+          <p className="eyebrow">Avanzado</p>
+          <h2>Diagnostico del runtime</h2>
         </div>
         <div className="internal-frame-preview__actions">
           {showCollapseToggle ? (
@@ -1246,7 +1271,7 @@ export function InternalRuntimeFramePreview({
                 setIsDebugPanelCollapsed((currentValue) => !currentValue)
               }
             >
-              {effectiveDebugPanelCollapsed ? "Mostrar debug" : "Ocultar debug"}
+              {effectiveDebugPanelCollapsed ? "Mostrar avanzado" : "Ocultar avanzado"}
             </button>
           ) : null}
           {!effectiveDebugPanelCollapsed ? (
@@ -1417,7 +1442,7 @@ export function InternalRuntimeFramePreview({
       </div>
 
       <div className="internal-frame-preview__setup">
-        <strong>Setup manual</strong>
+        <strong>Setup manual avanzado</strong>
         <div className="internal-frame-preview__setup-buttons">
           <button
             className="secondary-button"
@@ -1503,13 +1528,13 @@ export function InternalRuntimeFramePreview({
       </div>
 
       <div className="internal-frame-preview__loop">
-        <strong>Loop debug por batches</strong>
+        <strong>Batches de prueba</strong>
         <span>{isDebugLoopRunning ? "Activo" : "Inactivo"}</span>
         <span>{`Preset: ${activePerformancePreset.label}`}</span>
         <span>{`Batch: ${activePerformancePreset.batchFrames} frames`}</span>
         <span>{`Objetivo: ${activePerformancePreset.targetFps} FPS`}</span>
         <span>{`Renderizados: ${debugLoopFramesRendered}`}</span>
-        <span>Fallback debug: usa invoke y snapshots, no es el flujo principal.</span>
+        <span>Modo diagnostico: no es el flujo principal de juego.</span>
         <div className="internal-frame-preview__loop-buttons">
           <button
             className="primary-button"
@@ -1517,7 +1542,7 @@ export function InternalRuntimeFramePreview({
             onClick={() => void startDebugRenderLoop()}
             disabled={isActionLoading || isDebugLoopRunning || isNativeSessionActive}
           >
-            Iniciar loop debug
+            Iniciar prueba
           </button>
           <button
             className="secondary-button"
@@ -1525,13 +1550,13 @@ export function InternalRuntimeFramePreview({
             onClick={() => void stopDebugRenderLoop()}
             disabled={!isDebugLoopRunning}
           >
-            Detener loop debug
+            Detener prueba
           </button>
         </div>
       </div>
 
       <div className="internal-frame-preview__audio">
-        <strong>Audio debug</strong>
+        <strong>Audio avanzado</strong>
         <span>
           Experimental: drena audio cada {DEBUG_AUDIO_DRAIN_INTERVAL_MS}ms
           mientras esta activo. Puede desincronizarse.
@@ -1555,7 +1580,7 @@ export function InternalRuntimeFramePreview({
             onClick={() => void enableAudioDebug()}
             disabled={isAudioDebugEnabled}
           >
-            Activar audio debug
+            Activar audio
           </button>
           <button
             className="secondary-button"
@@ -1563,7 +1588,7 @@ export function InternalRuntimeFramePreview({
             onClick={() => void disableAudioDebug()}
             disabled={!isAudioDebugEnabled}
           >
-            Desactivar audio debug
+            Desactivar audio
           </button>
           <button
             className="secondary-button"
@@ -1701,4 +1726,4 @@ export function InternalRuntimeFramePreview({
       ) : null}
     </section>
   );
-}
+});

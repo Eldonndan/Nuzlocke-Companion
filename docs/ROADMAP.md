@@ -113,6 +113,7 @@ Status:
 - Enabled the main internal renderer from complete runtime config so auto-booted sessions render without requiring a manual status refresh.
 - Auto-armed debug audio so a gameplay-frame click or key press can enable Web Audio without opening the debug panel first.
 - Promoted SRAM refresh/load/save state into the Runtime tab with clear save-state warnings and autosave status.
+- Polished the internal playable shell so Runtime is the primary game control tab and advanced diagnostics stay behind Avanzado.
 - Physical input, production audio pipelines, GPU/shared-memory rendering, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline

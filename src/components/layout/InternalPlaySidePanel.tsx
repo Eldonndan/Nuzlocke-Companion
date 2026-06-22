@@ -15,7 +15,7 @@ const tabs: Array<{ id: InternalPlayTab; label: string }> = [
   { id: "team", label: "Equipo" },
   { id: "run", label: "Run" },
   { id: "runtime", label: "Runtime" },
-  { id: "debug", label: "Debug" },
+  { id: "debug", label: "Avanzado" },
 ];
 
 export function InternalPlaySidePanel({
