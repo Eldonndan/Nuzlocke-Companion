@@ -17,6 +17,7 @@ import {
 export type CreateRunValues = {
   name: string;
   platform: string;
+  gameId?: string;
   gameName: string;
   challengeType: string;
   emulatorPath?: string;
@@ -35,6 +36,7 @@ export function createRunState(values: CreateRunValues): RunState {
     id: createRunId(),
     name: values.name.trim(),
     platform: values.platform,
+    gameId: values.gameId,
     gamePackId: gamePack?.id,
     gameName: values.gameName,
     challengeType: values.challengeType,

@@ -127,6 +127,7 @@ export type RunState = {
   id: string;
   name: string;
   platform: string;
+  gameId?: string;
   gamePackId?: string;
   gameName: string;
   challengeType: string;

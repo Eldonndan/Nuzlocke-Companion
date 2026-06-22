@@ -486,6 +486,14 @@ Configured internal runs auto boot into the native-paced Libretro session. The m
 
 Audio is currently an auto-armed Web Audio debug path, not the final synchronized audio pipeline. Input is scoped to the gameplay frame and internal panel, with no global keyboard listeners. SRAM support persists Libretro battery save memory and is explicitly not a save state. Closing the app with an active internal session attempts to stop the runtime and autosave SRAM before closing. Legacy external mGBA mode remains available as a fallback.
 
+### Pokemon Game Library Flow
+
+The create-run flow now starts from a static local catalog of Pokemon GB/GBC/GBA games. Each catalog entry has app-owned metadata such as title, console, generation, region, release group, and visual accent. Cards use original UI styling, text, color, and initials only; the app does not include official box art, screenshots, ROMs, BIOS files, cores, or copyrighted game assets.
+
+The local ROM library stores only `gameId -> romPath` associations in browser local storage. Selecting or changing a ROM opens the existing system file picker and saves the chosen local path; the app does not copy, scan, hash, download, or modify ROM files. Games without an associated ROM stay visually disabled and ask the user to assign a ROM first.
+
+Once a ROM is associated, the user configures a small Nuzlocke starter setup with lives and creates an internal Libretro run from the selected `gameId`, platform, game title, and associated ROM path. Core path and save directory remain runtime-local configuration; if core setup is still missing, the existing guided internal runtime setup asks for it when the play screen opens.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

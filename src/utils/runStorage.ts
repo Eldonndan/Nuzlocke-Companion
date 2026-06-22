@@ -73,6 +73,7 @@ function isRunState(value: unknown): value is RunState {
     typeof value.id === "string" &&
     typeof value.name === "string" &&
     typeof value.platform === "string" &&
+    optionalString(value.gameId) &&
     optionalString(value.gamePackId) &&
     typeof value.gameName === "string" &&
     typeof value.challengeType === "string" &&

@@ -138,6 +138,25 @@ Deliverables:
 - Basic setup for lives and rules before entering the play screen.
 - Clear copy explaining that ROMs, BIOS files, and cores are not bundled or downloaded.
 
+Status:
+
+- Added a static Pokemon GB/GBC/GBA catalog.
+- Added local `gameId -> romPath` storage for user-selected ROM paths.
+- Added console filtering and original app-styled game cards.
+- Added grey pending cards for games without ROMs and active cards when a ROM is associated.
+- Added ROM assignment/change flow through the system file picker.
+- Added basic run setup with lives before creating the run.
+- Created internal Libretro runs from selected game metadata and associated ROM path.
+
+Future work:
+
+- Folder scanning for ROMs.
+- ROM hash detection.
+- Game-specific level caps.
+- Advanced rule presets.
+- User-provided custom cover art.
+- DS support.
+
 ## Phase 5: Video Pipeline
 
 Objectives:
