@@ -232,6 +232,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const isInternalNativeSessionActiveRef = useRef(false);
   const isInternalShutdownInProgressRef = useRef(false);
   const shouldCloseAfterInternalShutdownRef = useRef(false);
+  const autoOpenedInternalConfigKeyRef = useRef("");
   const dockResizeTimeoutRef = useRef<number | null>(null);
   const dockedWindowIdRef = useRef<string | null>(null);
 
@@ -250,6 +251,9 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const hasInternalRuntimeConfigured = isInternalRuntime && Boolean(
     runtimeConfig.corePath && runtimeConfig.romPath,
   );
+  const internalConfigAutoOpenKey = isInternalRuntime
+    ? `${runtimeConfig.corePath.trim()}|${runtimeConfig.romPath.trim()}`
+    : "legacy";
   const disableInternalDestructiveActions =
     isInternalRuntime &&
     (isInternalDebugLoopRunning ||
@@ -1470,6 +1474,20 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       setIsInternalDebugPanelCollapsed(false);
     }
   }, [isInternalRuntime]);
+
+  useEffect(() => {
+    if (!isInternalRuntime || hasInternalRuntimeConfigured) {
+      return;
+    }
+
+    if (autoOpenedInternalConfigKeyRef.current === internalConfigAutoOpenKey) {
+      return;
+    }
+
+    autoOpenedInternalConfigKeyRef.current = internalConfigAutoOpenKey;
+    setIsEmulatorPanelOpen(true);
+    setSessionStatus("Configura el runtime interno para empezar a jugar.");
+  }, [hasInternalRuntimeConfigured, internalConfigAutoOpenKey, isInternalRuntime]);
 
   useEffect(() => {
     if (!isCaptureSessionRunning) {

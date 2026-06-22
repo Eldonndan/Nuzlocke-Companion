@@ -419,6 +419,12 @@ The auto boot is frontend lifecycle glue only. It does not download cores or ROM
 
 The main internal display controller is enabled as soon as an internal run has configured core and ROM paths. It can wait for the first frame before the parent screen has observed an active session status, using a throttled retry path so opening a run does not require pressing "Leer estado" to wake up rendering.
 
+### Internal Runtime Setup UX
+
+Internal Libretro configuration is presented as a guided setup rather than a technical path form. The panel walks the user through selecting a local mGBA Libretro core, a legal local GB/GBC/GBA ROM, and a recommended save directory, with per-step complete/pending state and a final "Listo para jugar" status when core and ROM are present.
+
+The app still does not download, bundle, or link to cores, ROMs, or BIOS files. "Guardar y jugar" only closes the setup panel after the required paths are present; the existing auto boot flow starts the runtime from the saved run configuration. If an internal run is opened without core or ROM paths, the setup panel opens once to guide the user, while already configured runs go straight to play.
+
 ### Internal Debug Audio Drain
 
 Audio remains a debug-only Web Audio path. Libretro audio callbacks copy PCM samples into a bounded Rust buffer while the native session runs, and the internal runtime controller drains that buffer on a frontend interval while audio debug is enabled. The drain interval is independent of the Debug tab and does not depend on the old bounded frame loop.

@@ -116,6 +116,7 @@ Status:
 - Polished the internal playable shell so Runtime is the primary game control tab and advanced diagnostics stay behind Avanzado.
 - Surfaced the default scoped keyboard controls in Runtime with focus state and a retained-button clear action.
 - Added close-request protection so active internal sessions stop and autosave SRAM before the app window closes.
+- Improved internal runtime setup with guided core/ROM/save-directory steps and a Guardar y jugar flow.
 - Physical input, production audio pipelines, GPU/shared-memory rendering, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline

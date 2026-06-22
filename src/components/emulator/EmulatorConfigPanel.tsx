@@ -3,6 +3,7 @@ import type {
   LegacyExternalRuntimeConfig,
   RuntimeConfig,
 } from "../../shared/types";
+import { useState } from "react";
 import {
   createDefaultInternalLibretroRuntimeConfig,
   createDefaultLegacyExternalRuntimeConfig,
@@ -22,6 +23,12 @@ type EmulatorConfigPanelProps = {
   onSelectCore?: PathPicker;
   onSelectSaveDirectory?: PathPicker;
   onClose?: () => void;
+};
+
+type SetupStep = {
+  title: string;
+  description: string;
+  isComplete: boolean;
 };
 
 function toLegacyConfig(config: RuntimeConfig): LegacyExternalRuntimeConfig {
@@ -55,10 +62,40 @@ export function EmulatorConfigPanel({
   onSelectSaveDirectory,
   onClose,
 }: EmulatorConfigPanelProps) {
+  const [panelMessage, setPanelMessage] = useState("");
   const isLegacyMode = isLegacyExternalRuntime(config);
   const isInternalMode = isInternalLibretroRuntime(config);
   const legacyConfig = toLegacyConfig(config);
   const internalConfig = toInternalConfig(config);
+  const isInternalCoreConfigured = internalConfig.corePath.trim().length > 0;
+  const isInternalRomConfigured = internalConfig.romPath.trim().length > 0;
+  const isInternalSaveDirectoryConfigured =
+    (internalConfig.saveDirectory ?? "").trim().length > 0;
+  const isInternalReady =
+    isInternalCoreConfigured && isInternalRomConfigured;
+  const internalSetupSteps: SetupStep[] = [
+    {
+      title: "Seleccionar core Libretro mGBA",
+      description: "Necesitas un core Libretro local, por ejemplo mGBA.",
+      isComplete: isInternalCoreConfigured,
+    },
+    {
+      title: "Seleccionar ROM GB/GBC/GBA",
+      description: "Selecciona tu ROM legal de Pokemon.",
+      isComplete: isInternalRomConfigured,
+    },
+    {
+      title: "Seleccionar carpeta de guardado",
+      description:
+        "Opcional, pero recomendado para saber donde queda tu .srm.",
+      isComplete: isInternalSaveDirectoryConfigured,
+    },
+  ];
+  const internalReadyMessage = isInternalReady
+    ? "Listo para jugar"
+    : !isInternalCoreConfigured
+      ? "Falta core"
+      : "Falta ROM";
   const shouldWarnEmulatorPath =
     legacyConfig.executablePath.trim().length > 0 &&
     !legacyConfig.executablePath.trim().toLowerCase().endsWith(".exe");
@@ -73,7 +110,28 @@ export function EmulatorConfigPanel({
   const updateInternalConfig = (
     nextConfig: InternalLibretroRuntimeConfig,
   ) => {
+    setPanelMessage("");
     onChange(normalizeInternalLibretroRuntimeConfig(nextConfig));
+  };
+
+  const saveAndPlay = () => {
+    if (!isInternalMode) {
+      onClose?.();
+      return;
+    }
+
+    if (!isInternalCoreConfigured) {
+      setPanelMessage("Falta seleccionar el core Libretro mGBA.");
+      return;
+    }
+
+    if (!isInternalRomConfigured) {
+      setPanelMessage("Falta seleccionar la ROM.");
+      return;
+    }
+
+    setPanelMessage("Configuracion lista. Iniciando juego...");
+    onClose?.();
   };
 
   const updateLaunchArgs = (value: string) => {
@@ -107,7 +165,7 @@ export function EmulatorConfigPanel({
         <div>
           <p className="eyebrow">Runtime</p>
           <h2 id="emulator-panel-title">
-            {isInternalMode ? "Libretro interno" : "mGBA externo"}
+            {isInternalMode ? "Configurar runtime interno" : "mGBA externo"}
           </h2>
         </div>
         {onClose ? (
@@ -233,10 +291,33 @@ export function EmulatorConfigPanel({
 
       {isInternalMode ? (
         <>
-          <p className="emulator-panel__help">
-            Selecciona un core Libretro local, por ejemplo mgba_libretro.dll.
-            La app no incluye cores, ROMs ni BIOS.
-          </p>
+          <section className="internal-setup-guide" aria-label="Pasos de configuracion">
+            <div className="internal-setup-guide__header">
+              <strong>{internalReadyMessage}</strong>
+              <span>
+                La app no incluye cores, ROMs ni BIOS. Auto boot iniciara la
+                run cuando guardes una configuracion completa.
+              </span>
+            </div>
+            <ol className="internal-setup-steps">
+              {internalSetupSteps.map((step) => (
+                <li
+                  className={
+                    step.isComplete
+                      ? "internal-setup-step internal-setup-step--complete"
+                      : "internal-setup-step"
+                  }
+                  key={step.title}
+                >
+                  <div>
+                    <strong>{step.title}</strong>
+                    <span>{step.description}</span>
+                  </div>
+                  <span>{step.isComplete ? "Completo" : "Pendiente"}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
 
           <label className="form-field">
             <span>Core</span>
@@ -279,12 +360,11 @@ export function EmulatorConfigPanel({
                   )
                 }
               >
-                Buscar
+                Seleccionar core mGBA
               </button>
             </div>
             <small>
-              Ruta local al core Libretro. No se descarga ni valida desde este
-              panel.
+              Necesitas un core Libretro local, por ejemplo mgba_libretro.dll.
             </small>
           </label>
 
@@ -314,14 +394,14 @@ export function EmulatorConfigPanel({
                   )
                 }
               >
-                Buscar
+                Seleccionar ROM
               </button>
             </div>
-            <small>Ruta a una ROM propia del usuario.</small>
+            <small>Selecciona tu ROM legal de Pokemon.</small>
           </label>
 
           <label className="form-field">
-            <span>Directorio de guardado opcional</span>
+            <span>Directorio de guardado</span>
             <div className="path-field">
               <input
                 type="text"
@@ -346,14 +426,29 @@ export function EmulatorConfigPanel({
                   )
                 }
               >
-                Buscar
+                Seleccionar carpeta de guardado
               </button>
             </div>
             <small>
-              Si queda vacio, el runtime usara el directorio de la ROM cuando
+              Recomendado: elige una carpeta de guardado para mantener tus .srm
+              ordenados. Si queda vacio, se usara la carpeta de la ROM cuando
               corresponda.
             </small>
           </label>
+
+          {panelMessage ? (
+            <p className="emulator-panel__status">{panelMessage}</p>
+          ) : null}
+
+          <div className="emulator-panel__footer-actions">
+            <button
+              className="primary-button"
+              type="button"
+              onClick={saveAndPlay}
+            >
+              Guardar y jugar
+            </button>
+          </div>
         </>
       ) : null}
     </aside>
