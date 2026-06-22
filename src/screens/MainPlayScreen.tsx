@@ -1,5 +1,6 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { EmulatorConfigPanel } from "../components/emulator/EmulatorConfigPanel";
 import { InternalRuntimeDisplayController } from "../components/emulator/InternalRuntimeDisplayController";
 import {
@@ -207,6 +208,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     useState("Audio: armado");
   const [isInternalKeyboardFocused, setIsInternalKeyboardFocused] =
     useState(false);
+  const [isInternalShutdownInProgress, setIsInternalShutdownInProgress] =
+    useState(false);
   const [internalPlayTab, setInternalPlayTab] =
     useState<InternalPlayTab>("runtime");
   const [frameStatus, setFrameStatus] = useState("");
@@ -225,6 +228,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const gameplayScreenRef = useRef<HTMLDivElement | null>(null);
   const internalRuntimePreviewRef =
     useRef<InternalRuntimeFramePreviewHandle | null>(null);
+  const isInternalRuntimeRef = useRef(false);
+  const isInternalNativeSessionActiveRef = useRef(false);
+  const isInternalShutdownInProgressRef = useRef(false);
+  const shouldCloseAfterInternalShutdownRef = useRef(false);
   const dockResizeTimeoutRef = useRef<number | null>(null);
   const dockedWindowIdRef = useRef<string | null>(null);
 
@@ -246,7 +253,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const disableInternalDestructiveActions =
     isInternalRuntime &&
     (isInternalDebugLoopRunning ||
-      Boolean(internalRuntimeStatus?.sessionInfo?.isActive));
+      Boolean(internalRuntimeStatus?.sessionInfo?.isActive) ||
+      isInternalShutdownInProgress);
   const isInternalNativeSessionActive = Boolean(
     internalRuntimeStatus?.sessionInfo?.isActive,
   );
@@ -263,7 +271,13 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   );
   const lastSaveOperation = internalRuntimeStatus?.lastSaveOperation ?? null;
   const disableInternalSaveActions =
-    isInternalDebugLoopRunning || isInternalNativeSessionActive;
+    isInternalDebugLoopRunning ||
+    isInternalNativeSessionActive ||
+    isInternalShutdownInProgress;
+
+  isInternalRuntimeRef.current = isInternalRuntime;
+  isInternalNativeSessionActiveRef.current = isInternalNativeSessionActive;
+  isInternalShutdownInProgressRef.current = isInternalShutdownInProgress;
 
   const applyInternalRuntimeStatus = (status: InternalRuntimeStatus) => {
     setInternalRuntimeStatus(status);
@@ -321,6 +335,44 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           : `No se pudo detener el runtime interno antes de ${context}.`,
       );
       return false;
+    }
+  };
+
+  const stopInternalRuntimeBeforeWindowClose = async () => {
+    if (isInternalShutdownInProgressRef.current) {
+      setSessionStatus("Guardando SRAM antes de cerrar...");
+      return;
+    }
+
+    isInternalShutdownInProgressRef.current = true;
+    setIsInternalShutdownInProgress(true);
+    setSessionStatus("Guardando SRAM antes de cerrar...");
+
+    try {
+      const nextStatus = await stopInternalRuntime();
+      applyInternalRuntimeStatus(nextStatus);
+
+      if (nextStatus.lastSaveOperation?.saved) {
+        setSessionStatus(
+          `SRAM guardada. Cerrando... ${nextStatus.lastSaveOperation.filePath}`,
+        );
+      } else {
+        setSessionStatus("Sesion detenida. Cerrando...");
+      }
+
+      shouldCloseAfterInternalShutdownRef.current = true;
+      await getCurrentWindow().destroy();
+    } catch (error) {
+      shouldCloseAfterInternalShutdownRef.current = false;
+      isInternalShutdownInProgressRef.current = false;
+      setIsInternalShutdownInProgress(false);
+      const errorMessage =
+        typeof error === "string"
+          ? error
+          : "Deten la sesion manualmente o revisa el directorio de guardado.";
+      setSessionStatus(
+        `No se pudo guardar SRAM antes de cerrar. ${errorMessage}`,
+      );
     }
   };
 
@@ -1297,6 +1349,58 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     let unlisten: (() => void) | null = null;
     let isDisposed = false;
 
+    void getCurrentWindow().onCloseRequested((event) => {
+      if (shouldCloseAfterInternalShutdownRef.current) {
+        return;
+      }
+
+      if (
+        !isInternalRuntimeRef.current ||
+        !isInternalNativeSessionActiveRef.current
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (isInternalShutdownInProgressRef.current) {
+        setSessionStatus("Guardando SRAM antes de cerrar...");
+        return;
+      }
+
+      void stopInternalRuntimeBeforeWindowClose();
+    }).then((nextUnlisten) => {
+      if (isDisposed) {
+        nextUnlisten();
+        return;
+      }
+
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      isDisposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (
+        isInternalRuntimeRef.current &&
+        isInternalNativeSessionActiveRef.current &&
+        !isInternalShutdownInProgressRef.current &&
+        !shouldCloseAfterInternalShutdownRef.current
+      ) {
+        void stopInternalRuntime();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let isDisposed = false;
+
     void listen<LiveCaptureFrame>("capture-frame", (event) => {
       setLiveFrame(event.payload);
     }).then((nextUnlisten) => {
@@ -1652,6 +1756,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
                       type="button"
                       onClick={() => void startInternalSession()}
                       disabled={
+                        isInternalShutdownInProgress ||
                         !hasInternalRuntimeConfigured ||
                         isInternalNativeSessionActive
                       }
@@ -1663,6 +1768,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
                       type="button"
                       onClick={() => void pauseInternalSession()}
                       disabled={
+                        isInternalShutdownInProgress ||
                         !isInternalNativeSessionActive ||
                         isInternalNativeSessionPaused
                       }
@@ -1674,6 +1780,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
                       type="button"
                       onClick={() => void resumeInternalSession()}
                       disabled={
+                        isInternalShutdownInProgress ||
                         !isInternalNativeSessionActive ||
                         !isInternalNativeSessionPaused
                       }
@@ -1684,7 +1791,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
                       className="secondary-button"
                       type="button"
                       onClick={() => void stopInternalSession()}
-                      disabled={!isInternalNativeSessionActive}
+                      disabled={
+                        isInternalShutdownInProgress ||
+                        !isInternalNativeSessionActive
+                      }
                     >
                       Detener
                     </button>
@@ -1705,6 +1815,7 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
                       className="secondary-button"
                       type="button"
                       onClick={() => void toggleInternalAudio()}
+                      disabled={isInternalShutdownInProgress}
                     >
                       {internalAudioStateLabel === "Audio: activo"
                         ? "Desactivar audio"

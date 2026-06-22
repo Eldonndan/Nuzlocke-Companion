@@ -466,6 +466,12 @@ Internal keyboard input remains scoped to the gameplay frame and the internal ru
 
 The UI exposes a "Soltar botones" action to clear retained Joypad state if focus is lost at an awkward moment. This prepares the UX surface for future rebinding or physical gamepad support, but those features are intentionally not implemented yet.
 
+### Internal Runtime Close Protection
+
+When the user closes the Tauri window while an internal Libretro session is active, the play screen intercepts the close request, stops the internal runtime, and lets the existing SRAM autosave teardown run before the window is destroyed. If autosave or teardown fails, the close is blocked and the error stays visible so progress is not silently discarded.
+
+Repeated close attempts while shutdown is already running do not start another stop/autosave request. A React unmount cleanup also attempts a best-effort stop if the internal play screen disappears unexpectedly, but the close-request guard is the path that blocks user-initiated window closes. This still persists battery SRAM only; it is not a save state.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:
