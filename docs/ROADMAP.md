@@ -108,6 +108,7 @@ Status:
 - Corrected internal frame aspect-ratio fitting so GB/GBC/GBA frames are centered without stretching.
 - Added a console-aware internal viewport shell for GBA and GB/GBC so the emulator canvas sits inside one aligned console screen.
 - Added a native-paced internal session loop in Rust with start/pause/resume/stop and binary RGBA frame transport for the main gameplay canvas.
+- Decoupled debug audio draining from the old frame loop so Web Audio drains the Rust PCM buffer on its own interval during native sessions.
 - Physical input, production audio pipelines, GPU/shared-memory rendering, and save states remain out of this spike.
 
 ## Phase 5: Video Pipeline

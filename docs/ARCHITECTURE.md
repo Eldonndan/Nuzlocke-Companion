@@ -405,6 +405,12 @@ The main gameplay renderer uses a two-step frame IPC path: JSON metadata via `in
 
 The older base64 snapshot and bounded batch commands remain available for debug/fallback workflows. This is still not WebGL, shared memory, a custom protocol, or the final GPU renderer, but it avoids base64/JSON payloads for the main gameplay frame.
 
+### Internal Debug Audio Drain
+
+Audio remains a debug-only Web Audio path. Libretro audio callbacks copy PCM samples into a bounded Rust buffer while the native session runs, and the internal runtime controller drains that buffer on a frontend interval while audio debug is enabled. The drain interval is independent of the Debug tab and does not depend on the old bounded frame loop.
+
+The UI exposes buffered, captured, drained, dropped, sample-rate, last-chunk, and frontend-error values so audio issues can be diagnosed from the runtime panel. The buffer is cleared when audio debug is enabled, disabled, or when backlog exceeds the debug threshold, but it is not cleared during normal drain ticks.
+
 ### Internal Frame Aspect-Ratio Fitting
 
 Internal gameplay frames use the snapshot's native dimensions as the canvas backing store, for example GBA `240x160` with a `3:2` aspect ratio. `GameplayFrame` observes the available screen area with `ResizeObserver`, computes the largest visual size that fits without changing aspect ratio, and applies that CSS size to the internal canvas.
