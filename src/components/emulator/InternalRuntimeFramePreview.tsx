@@ -70,6 +70,7 @@ const DEBUG_AUDIO_MAX_DRAIN_ATTEMPTS = 3;
 const DEBUG_AUDIO_BACKLOG_RESET_FRAMES = 96_000;
 const DEBUG_AUDIO_MAX_LEAD_SECONDS = 0.35;
 const AUTO_START_INTERNAL_RUNTIME = true;
+const AUTO_ARM_INTERNAL_AUDIO = true;
 
 type InternalPerformancePreset = "smooth" | "balanced" | "battery";
 
@@ -245,6 +246,7 @@ export function InternalRuntimeFramePreview({
   const audioContextRef = useRef<AudioContext | null>(null);
   const nextAudioTimeRef = useRef(0);
   const isAudioDebugEnabledRef = useRef(false);
+  const hasTriedAutoAudioRef = useRef(false);
   const audioDrainIntervalRef = useRef<number | null>(null);
   const audioDrainInFlightRef = useRef(false);
   const hasAttemptedAutoBootRef = useRef(false);
@@ -261,8 +263,15 @@ export function InternalRuntimeFramePreview({
     useState<InternalSaveOperationResult | null>(null);
   const [audioInfo, setAudioInfo] = useState<InternalAudioInfo | null>(null);
   const [isAudioDebugEnabled, setIsAudioDebugEnabled] = useState(false);
+  const [isAudioAutoArmed, setIsAudioAutoArmed] = useState(
+    AUTO_ARM_INTERNAL_AUDIO,
+  );
   const [audioDebugMessage, setAudioDebugMessage] =
-    useState("Audio debug apagado.");
+    useState(
+      AUTO_ARM_INTERNAL_AUDIO
+        ? "Audio armado: haz click en el juego para activarlo."
+        : "Audio debug apagado.",
+    );
   const [lastAudioChunkFrames, setLastAudioChunkFrames] = useState(0);
   const [lastAudioError, setLastAudioError] = useState<string | null>(null);
   const [status, setStatus] = useState<PreviewStatus>("idle");
@@ -291,6 +300,13 @@ export function InternalRuntimeFramePreview({
   const isNativeSessionPaused = Boolean(runtimeStatus?.sessionInfo?.isPaused);
   const isAudioContextRunning =
     isAudioDebugEnabled && audioContextRef.current?.state === "running";
+  const audioStateLabel = lastAudioError
+    ? "Audio: error"
+    : isAudioContextRunning
+      ? "Audio: activo"
+      : isAudioAutoArmed
+        ? "Audio: armado"
+        : "Audio: apagado";
   const disableRuntimeLifecycleActions =
     disableLifecycleActions || isNativeSessionActive;
   const autoBootConfigKey = `${trimmedCore}|${trimmedCorePath}|${trimmedRomPath}|${
@@ -439,6 +455,7 @@ export function InternalRuntimeFramePreview({
       nextAudioTimeRef.current = context.currentTime;
       isAudioDebugEnabledRef.current = true;
       setIsAudioDebugEnabled(true);
+      setIsAudioAutoArmed(false);
       setLastAudioChunkFrames(0);
       setLastAudioError(null);
       startAudioDrainInterval();
@@ -459,9 +476,15 @@ export function InternalRuntimeFramePreview({
     stopAudioDrainInterval();
     isAudioDebugEnabledRef.current = false;
     setIsAudioDebugEnabled(false);
+    hasTriedAutoAudioRef.current = false;
+    setIsAudioAutoArmed(AUTO_ARM_INTERNAL_AUDIO);
     nextAudioTimeRef.current = 0;
     setLastAudioChunkFrames(0);
-    setAudioDebugMessage("Audio debug apagado.");
+    setAudioDebugMessage(
+      AUTO_ARM_INTERNAL_AUDIO
+        ? "Audio armado: haz click en el juego para activarlo."
+        : "Audio debug apagado.",
+    );
 
     try {
       const nextStatus = await clearInternalRuntimeAudioBuffer();
@@ -596,6 +619,19 @@ export function InternalRuntimeFramePreview({
     } catch (error) {
       setAudioDebugMessage(getErrorMessage(error));
     }
+  };
+
+  const tryEnableAudioFromUserGesture = () => {
+    if (
+      !isAudioAutoArmed ||
+      isAudioDebugEnabledRef.current ||
+      hasTriedAutoAudioRef.current
+    ) {
+      return;
+    }
+
+    hasTriedAutoAudioRef.current = true;
+    void enableAudioDebug();
   };
 
   const readRuntimeStatus = async () => {
@@ -742,11 +778,18 @@ export function InternalRuntimeFramePreview({
   };
 
   const startNativeSession = async () => {
-    await runRuntimeAction(
+    const nextStatus = await runRuntimeAction(
       "Iniciando sesion interna...",
       startInternalRuntime,
-      "Sesion interna activa.",
+      AUTO_ARM_INTERNAL_AUDIO && !isAudioDebugEnabledRef.current
+        ? "Sesion interna activa. Haz click en el juego para activar audio."
+        : "Sesion interna activa.",
     );
+
+    if (nextStatus && AUTO_ARM_INTERNAL_AUDIO && !isAudioDebugEnabledRef.current) {
+      hasTriedAutoAudioRef.current = false;
+      setIsAudioAutoArmed(true);
+    }
   };
 
   const pauseNativeSession = async () => {
@@ -766,17 +809,33 @@ export function InternalRuntimeFramePreview({
   };
 
   const stopNativeSession = async () => {
-    await runRuntimeAction(
+    const nextStatus = await runRuntimeAction(
       "Deteniendo sesion interna...",
       stopInternalRuntime,
       "Sesion interna detenida.",
     );
+
+    if (nextStatus) {
+      hasTriedAutoAudioRef.current = false;
+      if (!isAudioDebugEnabledRef.current) {
+        setIsAudioAutoArmed(AUTO_ARM_INTERNAL_AUDIO);
+      }
+    }
   };
 
   useEffect(() => {
     if (autoBootConfigKeyRef.current !== autoBootConfigKey) {
       autoBootConfigKeyRef.current = autoBootConfigKey;
       hasAttemptedAutoBootRef.current = false;
+      hasTriedAutoAudioRef.current = false;
+      if (!isAudioDebugEnabledRef.current) {
+        setIsAudioAutoArmed(AUTO_ARM_INTERNAL_AUDIO);
+        setAudioDebugMessage(
+          AUTO_ARM_INTERNAL_AUDIO
+            ? "Audio armado: haz click en el juego para activarlo."
+            : "Audio debug apagado.",
+        );
+      }
     }
 
     if (
@@ -810,7 +869,9 @@ export function InternalRuntimeFramePreview({
 
         if (currentStatus.sessionInfo?.isActive) {
           setStatus("ready");
-          setMessage("Sesion interna ya estaba activa.");
+          setMessage(
+            "Sesion interna ya estaba activa. Haz click en el juego para activar audio.",
+          );
           return;
         }
 
@@ -826,11 +887,15 @@ export function InternalRuntimeFramePreview({
 
         if (!isCancelled) {
           setStatus("ready");
+          if (AUTO_ARM_INTERNAL_AUDIO) {
+            hasTriedAutoAudioRef.current = false;
+            setIsAudioAutoArmed(true);
+          }
           setMessage(
             syncedStatus.lastSaveOperation?.loaded === false ||
               finalStatus.lastSaveOperation?.loaded === false
-              ? "Sesion interna iniciada. No habia SRAM para cargar."
-              : "Sesion interna iniciada.",
+              ? "Sesion interna iniciada. No habia SRAM para cargar. Haz click en el juego para activar audio."
+              : "Sesion interna iniciada. Haz click en el juego para activar audio.",
           );
         }
       } catch (error) {
@@ -1082,7 +1147,11 @@ export function InternalRuntimeFramePreview({
     const handleTargetFocus = () => {
       setIsKeyboardFocused(true);
     };
+    const handleTargetUserGesture = () => {
+      tryEnableAudioFromUserGesture();
+    };
     const handleTargetKeyDown = (event: globalThis.KeyboardEvent) => {
+      tryEnableAudioFromUserGesture();
       handleKeyboardDown(
         event.code,
         event.repeat,
@@ -1109,17 +1178,19 @@ export function InternalRuntimeFramePreview({
     };
 
     keyboardTarget.addEventListener("focus", handleTargetFocus);
+    keyboardTarget.addEventListener("pointerdown", handleTargetUserGesture);
     keyboardTarget.addEventListener("keydown", handleTargetKeyDown);
     keyboardTarget.addEventListener("keyup", handleTargetKeyUp);
     keyboardTarget.addEventListener("blur", handleTargetBlur);
 
     return () => {
       keyboardTarget.removeEventListener("focus", handleTargetFocus);
+      keyboardTarget.removeEventListener("pointerdown", handleTargetUserGesture);
       keyboardTarget.removeEventListener("keydown", handleTargetKeyDown);
       keyboardTarget.removeEventListener("keyup", handleTargetKeyUp);
       keyboardTarget.removeEventListener("blur", handleTargetBlur);
     };
-  }, [keyboardTargetRef]);
+  }, [isAudioAutoArmed, keyboardTargetRef]);
 
   useEffect(() => {
     onDebugPanelCollapsedChange?.(effectiveDebugPanelCollapsed);
@@ -1235,7 +1306,7 @@ export function InternalRuntimeFramePreview({
           runtimeStatus?.avInfo?.fps ??
           0
         }`}</span>
-        <span>{isAudioContextRunning ? "Audio debug activo" : "Audio apagado"}</span>
+        <span>{audioStateLabel}</span>
         <span>{`Buffer audio: ${audioInfo?.bufferedFrames ?? 0}`}</span>
         <span>{`Ultimo chunk: ${lastAudioChunkFrames}`}</span>
         <label className="internal-frame-preview__preset">
@@ -1465,7 +1536,10 @@ export function InternalRuntimeFramePreview({
           Experimental: drena audio cada {DEBUG_AUDIO_DRAIN_INTERVAL_MS}ms
           mientras esta activo. Puede desincronizarse.
         </span>
-        <span>{isAudioContextRunning ? "AudioContext running" : "Audio apagado"}</span>
+        <span>{audioStateLabel}</span>
+        {isAudioAutoArmed && !isAudioDebugEnabled ? (
+          <span>Haz click en el juego para activar audio.</span>
+        ) : null}
         <span>{audioDebugMessage}</span>
         <span>{`Ultimo chunk: ${lastAudioChunkFrames} frames`}</span>
         <span>{`Frecuencia: ${audioInfo?.sampleRate ?? 0}`}</span>

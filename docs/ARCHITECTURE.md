@@ -419,6 +419,12 @@ Audio remains a debug-only Web Audio path. Libretro audio callbacks copy PCM sam
 
 The UI exposes buffered, captured, drained, dropped, sample-rate, last-chunk, and frontend-error values so audio issues can be diagnosed from the runtime panel. The buffer is cleared when audio debug is enabled, disabled, or when backlog exceeds the debug threshold, but it is not cleared during normal drain ticks.
 
+### Auto-Armed Debug Audio
+
+Internal debug audio is auto-armed for configured internal runs, but playback is still started only after a user gesture on the scoped gameplay frame, such as click or key press. This follows Web Audio activation constraints while avoiding a separate trip into the debug panel for normal smoke testing.
+
+The manual audio buttons remain available as fallback. The audio path is still debug-only, drains the Rust PCM buffer from the frontend, does not depend on the Debug tab being visible, and is not the final synchronized audio pipeline.
+
 ### Internal Frame Aspect-Ratio Fitting
 
 Internal gameplay frames use the snapshot's native dimensions as the canvas backing store, for example GBA `240x160` with a `3:2` aspect ratio. `GameplayFrame` observes the available screen area with `ResizeObserver`, computes the largest visual size that fits without changing aspect ratio, and applies that CSS size to the internal canvas.
