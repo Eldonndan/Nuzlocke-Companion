@@ -28,6 +28,17 @@ const kantoBadges: GameBadge[] = [
   { id: "earth", name: "Tierra", leaderName: "Giovanni", levelCap: 50 },
 ];
 
+const johtoBadges: GameBadge[] = [
+  { id: "zephyr", name: "Céfiro", leaderName: "Falkner", levelCap: 9 },
+  { id: "hive", name: "Colmena", leaderName: "Bugsy", levelCap: 16 },
+  { id: "plain", name: "Planicie", leaderName: "Whitney", levelCap: 20 },
+  { id: "fog", name: "Niebla", leaderName: "Morty", levelCap: 25 },
+  { id: "storm", name: "Tormenta", leaderName: "Chuck", levelCap: 30 },
+  { id: "mineral", name: "Mineral", leaderName: "Jasmine", levelCap: 35 },
+  { id: "glacier", name: "Glaciar", leaderName: "Pryce", levelCap: 31 },
+  { id: "rising", name: "Dragón", leaderName: "Clair", levelCap: 40 },
+];
+
 const hoennRubySapphireBadges: GameBadge[] = [
   { id: "stone", name: "Piedra", leaderName: "Roxanne", levelCap: 15 },
   { id: "knuckle", name: "Puño", leaderName: "Brawly", levelCap: 18 },
@@ -84,34 +95,42 @@ const hoennRoutes = [
   "Calle Victoria",
 ];
 
+function createKantoPack(
+  id: string,
+  displayName: string,
+  platform: string,
+  routes: string[] = [],
+): GamePack {
+  return {
+    id,
+    displayName,
+    platform,
+    defaultInitialRoute: "Inicio",
+    defaultInitialLevelCap: 14,
+    badges: kantoBadges,
+    routes,
+  };
+}
+
+function createJohtoPack(id: string, displayName: string): GamePack {
+  return {
+    id,
+    displayName,
+    platform: "GBC",
+    defaultInitialRoute: "Inicio",
+    defaultInitialLevelCap: 9,
+    badges: johtoBadges,
+    routes: [],
+  };
+}
+
 export const gamePacks: GamePack[] = [
-  {
-    id: "pokemon-firered",
-    displayName: "Pokémon FireRed",
-    platform: "GBA",
-    defaultInitialRoute: "Ruta 1",
-    defaultInitialLevelCap: 14,
-    badges: kantoBadges,
-    routes: kantoRoutes,
-  },
-  {
-    id: "pokemon-leafgreen",
-    displayName: "Pokémon LeafGreen",
-    platform: "GBA",
-    defaultInitialRoute: "Ruta 1",
-    defaultInitialLevelCap: 14,
-    badges: kantoBadges,
-    routes: kantoRoutes,
-  },
-  {
-    id: "pokemon-emerald",
-    displayName: "Pokémon Emerald",
-    platform: "GBA",
-    defaultInitialRoute: "Ruta 101",
-    defaultInitialLevelCap: 15,
-    badges: hoennEmeraldBadges,
-    routes: hoennRoutes,
-  },
+  createKantoPack("pokemon-red", "Pokémon Red", "GB"),
+  createKantoPack("pokemon-blue", "Pokémon Blue", "GB"),
+  createKantoPack("pokemon-yellow", "Pokémon Yellow", "GB"),
+  createJohtoPack("pokemon-gold", "Pokémon Gold"),
+  createJohtoPack("pokemon-silver", "Pokémon Silver"),
+  createJohtoPack("pokemon-crystal", "Pokémon Crystal"),
   {
     id: "pokemon-ruby",
     displayName: "Pokémon Ruby",
@@ -130,7 +149,22 @@ export const gamePacks: GamePack[] = [
     badges: hoennRubySapphireBadges,
     routes: hoennRoutes,
   },
+  {
+    id: "pokemon-emerald",
+    displayName: "Pokémon Emerald",
+    platform: "GBA",
+    defaultInitialRoute: "Ruta 101",
+    defaultInitialLevelCap: 15,
+    badges: hoennEmeraldBadges,
+    routes: hoennRoutes,
+  },
+  createKantoPack("pokemon-firered", "Pokémon FireRed", "GBA", kantoRoutes),
+  createKantoPack("pokemon-leafgreen", "Pokémon LeafGreen", "GBA", kantoRoutes),
 ];
+
+export function getGamePackById(gameId: string) {
+  return gamePacks.find((gamePack) => gamePack.id === gameId);
+}
 
 export function getGamePackByGameName(gameName: string) {
   return gamePacks.find((gamePack) => gamePack.displayName === gameName);

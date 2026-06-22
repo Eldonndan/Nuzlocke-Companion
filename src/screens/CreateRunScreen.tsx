@@ -7,7 +7,11 @@ import {
   type PokemonGameCatalogEntry,
   type PokemonPlatform,
 } from "../data/pokemonGameCatalog";
-import { gamePacks, getGamePackByGameName } from "../data/gamePacks";
+import {
+  gamePacks,
+  getGamePackByGameName,
+  getGamePackById,
+} from "../data/gamePacks";
 import type { RunState, RuntimeConfig } from "../shared/types";
 import {
   selectEmulatorExecutable,
@@ -69,16 +73,16 @@ function platformToRunPlatform(platform: PokemonPlatform) {
 }
 
 function getDefaultRoute(game: PokemonGameCatalogEntry) {
-  const pack = getGamePackByGameName(game.title);
+  const pack = getGamePackById(game.id);
   if (pack) {
     return pack.defaultInitialRoute;
   }
 
-  return game.platform === "gba" ? "Ruta 1" : "Pueblo inicial";
+  return "Inicio";
 }
 
 function getDefaultLevelCap(game: PokemonGameCatalogEntry) {
-  return getGamePackByGameName(game.title)?.defaultInitialLevelCap ?? 5;
+  return getGamePackById(game.id)?.defaultInitialLevelCap ?? 5;
 }
 
 function getFileNameFromPath(path: string) {

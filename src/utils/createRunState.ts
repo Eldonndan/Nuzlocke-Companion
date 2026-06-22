@@ -1,5 +1,6 @@
 import {
   createBadgesFromGamePack,
+  getGamePackById,
   getGamePackByGameName,
 } from "../data/gamePacks";
 import type {
@@ -30,7 +31,9 @@ export type CreateRunValues = {
 };
 
 export function createRunState(values: CreateRunValues): RunState {
-  const gamePack = getGamePackByGameName(values.gameName);
+  const gamePack = values.gameId
+    ? getGamePackById(values.gameId) ?? getGamePackByGameName(values.gameName)
+    : getGamePackByGameName(values.gameName);
 
   return {
     id: createRunId(),

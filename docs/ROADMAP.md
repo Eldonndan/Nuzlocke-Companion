@@ -150,11 +150,13 @@ Status:
 - Created internal Libretro runs from selected game metadata and associated ROM path.
 - Added local internal runtime preferences for `core`, `corePath`, and save directory reuse without storing a global ROM path.
 - Polished the library entry flow with a stronger hero, runtime readiness card, console tabs with counts, clearer ROM status cards, and a guided run setup summary.
+- Aligned the Pokemon catalog with basic run data by resolving game packs through stable `gameId` values and adding badge sets for every GB/GBC/GBA catalog game.
 
 Future work:
 
 - Folder scanning for ROMs.
 - ROM hash detection.
+- Detailed route data and route tracker integration.
 - Game-specific level caps.
 - Advanced rule presets.
 - User-provided custom cover art.
