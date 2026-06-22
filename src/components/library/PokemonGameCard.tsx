@@ -10,6 +10,10 @@ type PokemonGameCardProps = {
   onConfigureRun: (game: PokemonGameCatalogEntry) => void;
 };
 
+function getFileNameFromPath(path: string) {
+  return path.split(/[\\/]/).pop() || "Archivo ROM asociado";
+}
+
 export function PokemonGameCard({
   game,
   romPath,
@@ -46,7 +50,7 @@ export function PokemonGameCard({
           <span>{game.releaseGroup}</span>
         </div>
         <strong>{hasRom ? "ROM lista" : "ROM pendiente"}</strong>
-        {romPath ? <small>{romPath}</small> : null}
+        {romPath ? <small>{getFileNameFromPath(romPath)}</small> : null}
       </div>
       <div className="pokemon-game-card__actions">
         {hasRom ? (

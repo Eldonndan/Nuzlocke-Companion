@@ -490,7 +490,7 @@ Audio is currently an auto-armed Web Audio debug path, not the final synchronize
 
 The create-run flow now starts from a static local catalog of Pokemon GB/GBC/GBA games. Each catalog entry has app-owned metadata such as title, console, generation, region, release group, and visual accent. Cards use original UI styling, text, color, and initials only; the app does not include official box art, screenshots, ROMs, BIOS files, cores, or copyrighted game assets.
 
-The local ROM library stores only `gameId -> romPath` associations in browser local storage. Selecting or changing a ROM opens the existing system file picker and saves the chosen local path; the app does not copy, scan, hash, download, or modify ROM files. Games without an associated ROM stay visually disabled and ask the user to assign a ROM first.
+The local ROM library stores only `gameId -> romPath` associations in browser local storage. Selecting or changing a ROM opens the existing system file picker and saves the chosen local path; the app does not copy, scan, hash, download, or modify ROM files. The main library cards show ROM readiness and the selected file name, not the full local path. Games without an associated ROM stay visually disabled and ask the user to assign a ROM first.
 
 Once a ROM is associated, the user configures a small Nuzlocke starter setup with lives and creates an internal Libretro run from the selected `gameId`, platform, game title, and associated ROM path. Core path and save directory remain runtime-local configuration; if core setup is still missing, the existing guided internal runtime setup asks for it when the play screen opens.
 

@@ -144,6 +144,7 @@ Status:
 - Added local `gameId -> romPath` storage for user-selected ROM paths.
 - Added console filtering and original app-styled game cards.
 - Added grey pending cards for games without ROMs and active cards when a ROM is associated.
+- Hid full local ROM paths from the main library cards while preserving the stored association internally.
 - Added ROM assignment/change flow through the system file picker.
 - Added basic run setup with lives before creating the run.
 - Created internal Libretro runs from selected game metadata and associated ROM path.
