@@ -478,6 +478,14 @@ When the user closes the Tauri window while an internal Libretro session is acti
 
 Repeated close attempts while shutdown is already running do not start another stop/autosave request. A React unmount cleanup also attempts a best-effort stop if the internal play screen disappears unexpectedly, but the close-request guard is the path that blocks user-initiated window closes. This still persists battery SRAM only; it is not a save state.
 
+### Internal Libretro Runtime Milestone
+
+The internal Libretro runtime is now the base playable flow for Nuzlocke Companion. Users configure a local Libretro core, a local ROM, and an optional save directory through the guided internal runtime setup. The app does not include, download, link to, or validate external sources for ROMs, BIOS files, or cores; users provide their own local files.
+
+Configured internal runs auto boot into the native-paced Libretro session. The main `GameplayFrame` renders the internal gameplay canvas, while the Runtime tab exposes normal session, audio, controls, and SRAM actions. The Avanzado tab remains available for diagnostics, manual lifecycle checks, frame stepping, batch tests, and detailed metadata.
+
+Audio is currently an auto-armed Web Audio debug path, not the final synchronized audio pipeline. Input is scoped to the gameplay frame and internal panel, with no global keyboard listeners. SRAM support persists Libretro battery save memory and is explicitly not a save state. Closing the app with an active internal session attempts to stop the runtime and autosave SRAM before closing. Legacy external mGBA mode remains available as a fallback.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

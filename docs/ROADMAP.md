@@ -80,7 +80,7 @@ Deliverables:
 - Notes on platform constraints, dynamic library loading, and packaging implications.
 - Decision on whether to keep Libretro as the core abstraction.
 
-Status:
+Status: Completed milestone.
 
 - Started with dynamic core loading and static metadata inspection only.
 - Added no-op frontend callbacks plus `retro_init` / `retro_deinit` lifecycle support.
@@ -117,7 +117,26 @@ Status:
 - Surfaced the default scoped keyboard controls in Runtime with focus state and a retained-button clear action.
 - Added close-request protection so active internal sessions stop and autosave SRAM before the app window closes.
 - Improved internal runtime setup with guided core/ROM/save-directory steps and a Guardar y jugar flow.
-- Physical input, production audio pipelines, GPU/shared-memory rendering, and save states remain out of this spike.
+- Closed as the first stable playable internal Libretro runtime milestone.
+- Physical input, production audio pipelines, GPU/shared-memory rendering, and save states remain out of this milestone.
+
+## Next Block: Game Library / Pokemon Selection Flow
+
+Objectives:
+
+- Replace raw runtime setup as the first user decision with a Pokemon game selection flow.
+- Keep ROM ownership explicit: users select local ROM files, and the app never copies, downloads, or bundles ROMs.
+- Prepare game-specific defaults without relying on copyrighted cover art or official assets.
+
+Deliverables:
+
+- Static catalog of supported Pokemon GB/GBC/GBA games.
+- Selection by console family.
+- Game cards using original app styling instead of official/copyrighted box art.
+- Per-game association with a user-selected local ROM path.
+- Run creation from a selected game.
+- Basic setup for lives and rules before entering the play screen.
+- Clear copy explaining that ROMs, BIOS files, and cores are not bundled or downloaded.
 
 ## Phase 5: Video Pipeline
 
