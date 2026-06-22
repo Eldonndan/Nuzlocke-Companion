@@ -1423,6 +1423,38 @@ h3 {
   line-height: 1.4;
 }
 
+.internal-runtime-preferences {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid rgba(189, 247, 220, 0.22);
+  border-radius: 8px;
+  background: rgba(64, 198, 137, 0.09);
+  color: #bdf7dc;
+  font-size: 0.84rem;
+  font-weight: 800;
+  padding: 8px 9px;
+}
+
+.text-button {
+  border: 0;
+  background: transparent;
+  color: #85d8ff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 900;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.text-button:hover {
+  color: #f7fbff;
+}
+
 .internal-setup-steps {
   display: grid;
   gap: 8px;
@@ -1511,6 +1543,17 @@ h3 {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 16px;
+}
+
+.library-runtime-status {
+  margin: -4px 0 16px;
+  border: 1px solid rgba(168, 207, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(5, 11, 24, 0.36);
+  color: #b9cbe0;
+  font-size: 0.9rem;
+  font-weight: 800;
+  padding: 9px 10px;
 }
 
 .pokemon-game-grid {

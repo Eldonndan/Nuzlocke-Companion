@@ -494,6 +494,14 @@ The local ROM library stores only `gameId -> romPath` associations in browser lo
 
 Once a ROM is associated, the user configures a small Nuzlocke starter setup with lives and creates an internal Libretro run from the selected `gameId`, platform, game title, and associated ROM path. Core path and save directory remain runtime-local configuration; if core setup is still missing, the existing guided internal runtime setup asks for it when the play screen opens.
 
+### Internal Runtime Local Preferences
+
+The app stores local internal runtime preferences separately from the Pokemon ROM library. These preferences include the selected Libretro core target, local core path, and optional save directory. They never include a global ROM path; ROMs remain associated per game through `gameId -> romPath`.
+
+Preferences only prefill empty internal runtime configs. Existing run-specific `corePath`, `romPath`, and `saveDirectory` values are respected, and applying preferences never changes `romPath`. The setup panel saves preferences explicitly from "Guardar y jugar" and lets the user forget them without changing the current run.
+
+The preference layer records local paths only. It does not copy, scan, download, or bundle cores, ROMs, BIOS files, or save files.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:

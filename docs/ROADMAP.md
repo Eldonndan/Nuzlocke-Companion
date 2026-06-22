@@ -148,6 +148,7 @@ Status:
 - Added ROM assignment/change flow through the system file picker.
 - Added basic run setup with lives before creating the run.
 - Created internal Libretro runs from selected game metadata and associated ROM path.
+- Added local internal runtime preferences for `core`, `corePath`, and save directory reuse without storing a global ROM path.
 
 Future work:
 

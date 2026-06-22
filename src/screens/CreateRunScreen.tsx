@@ -22,6 +22,10 @@ import {
   isInternalLibretroRuntime,
 } from "../utils/runtimeConfig";
 import {
+  applyInternalRuntimePreferencesToConfig,
+  loadInternalRuntimePreferences,
+} from "../utils/internalRuntimePreferences";
+import {
   loadPokemonRomLibrary,
   setPokemonRomPath,
   type PokemonRomLibrary,
@@ -78,7 +82,7 @@ function getDefaultLevelCap(game: PokemonGameCatalogEntry) {
 }
 
 export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
-  const defaultPack = getGamePackByGameName("Pokémon FireRed");
+  const defaultPack = getGamePackByGameName("PokÃ©mon FireRed");
   const [mode, setMode] = useState<CreateRunMode>("library");
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
   const [romLibrary, setRomLibrary] = useState<PokemonRomLibrary>(() =>
@@ -91,7 +95,7 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
 
   const [name, setName] = useState("");
   const [platform, setPlatform] = useState(defaultPack?.platform ?? "GBA");
-  const [gameName, setGameName] = useState("Pokémon FireRed");
+  const [gameName, setGameName] = useState("PokÃ©mon FireRed");
   const [challengeType, setChallengeType] = useState("Hardcore Nuzlocke");
   const [lives, setLives] = useState(4);
   const [routeName, setRouteName] = useState(
@@ -101,7 +105,9 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
     defaultPack?.defaultInitialLevelCap ?? 5,
   );
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>(() =>
-    createDefaultInternalLibretroRuntimeConfig(),
+    applyInternalRuntimePreferencesToConfig(
+      createDefaultInternalLibretroRuntimeConfig(),
+    ),
   );
   const [error, setError] = useState("");
 
@@ -198,9 +204,11 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
       }
     }
 
-    const baseInternalConfig = isInternalLibretroRuntime(runtimeConfig)
-      ? runtimeConfig
-      : createDefaultInternalLibretroRuntimeConfig();
+    const baseInternalConfig = applyInternalRuntimePreferencesToConfig(
+      isInternalLibretroRuntime(runtimeConfig)
+        ? runtimeConfig
+        : createDefaultInternalLibretroRuntimeConfig(),
+    );
 
     onCreate(
       createRunState({
@@ -317,6 +325,12 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
               </button>
             ))}
           </div>
+
+          <p className="library-runtime-status">
+            {loadInternalRuntimePreferences()?.corePath
+              ? "Runtime interno listo: se reutilizara tu core mGBA guardado."
+              : "Falta configurar core mGBA: podras hacerlo al entrar a la run."}
+          </p>
 
           <div className="pokemon-game-grid">
             {filteredCatalog.map((game) => (
