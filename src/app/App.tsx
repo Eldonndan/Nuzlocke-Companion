@@ -3,20 +3,61 @@ import { sampleRun } from "../data/sampleRun";
 import { CreateRunScreen } from "../screens/CreateRunScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { MainPlayScreen } from "../screens/MainPlayScreen";
+import { MyRunsScreen } from "../screens/MyRunsScreen";
 import type { AppScreen, RunState } from "../shared/types";
+import {
+  ensureCurrentRunInLibrary,
+  loadRunLibrary,
+  setActiveRunId,
+} from "../utils/runLibraryStorage";
 import { hasSavedRun, saveRun } from "../utils/runStorage";
 
 export function App() {
   const [screen, setScreen] = useState<AppScreen>("home");
   const run = useMemo(() => sampleRun, []);
+  const [runLibrary, setRunLibrary] = useState(() =>
+    ensureCurrentRunInLibrary(sampleRun),
+  );
+  const refreshRunLibrary = () => setRunLibrary(loadRunLibrary());
+
+  const createRun = (newRun: RunState) => {
+    saveRun(newRun);
+    refreshRunLibrary();
+    setScreen("play");
+  };
+
+  const continueRun = (selectedRun: RunState) => {
+    setActiveRunId(selectedRun.id);
+    saveRun(selectedRun);
+    refreshRunLibrary();
+    setScreen("play");
+  };
 
   if (screen === "create-run") {
     return (
       <CreateRunScreen
         onBack={() => setScreen("home")}
-        onCreate={(newRun: RunState) => {
-          saveRun(newRun);
-          setScreen("play");
+        onCreate={createRun}
+        onOpenMyRuns={() => {
+          refreshRunLibrary();
+          setScreen("my-runs");
+        }}
+        hasRunLibrary={runLibrary.runs.length > 0}
+      />
+    );
+  }
+
+  if (screen === "my-runs") {
+    return (
+      <MyRunsScreen
+        onBack={() => {
+          refreshRunLibrary();
+          setScreen("home");
+        }}
+        onContinueRun={continueRun}
+        onCreateNewRun={() => {
+          refreshRunLibrary();
+          setScreen("create-run");
         }}
       />
     );
@@ -29,8 +70,13 @@ export function App() {
   return (
     <HomeScreen
       hasSavedRun={hasSavedRun()}
+      hasRunLibrary={runLibrary.runs.length > 0}
       onContinueRun={() => setScreen("play")}
       onCreateRun={() => setScreen("create-run")}
+      onOpenMyRuns={() => {
+        refreshRunLibrary();
+        setScreen("my-runs");
+      }}
     />
   );
 }

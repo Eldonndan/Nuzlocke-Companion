@@ -33,6 +33,7 @@ Explicitly out of scope for the initial direction:
 - Badge icon fallback for older runs without `iconKey`.
 - QA checklist for the game library flow.
 - Multi-run storage foundation that mirrors future saves into a versioned local run library while preserving `current-run`.
+- Basic "Mis runs" screen for continuing and deleting locally saved runs.
 
 ## Phase 1: Documentation and Repo Preparation
 
@@ -179,7 +180,7 @@ Status: Completed milestone.
 - Added original SVG/CSS visuals for console icons, game cover cards, and themed badge icons without official assets.
 - Added QA documentation for manual validation.
 
-## In Progress: Multi-Run Storage
+## Completed: Basic Multi-Run Storage and My Runs
 
 Objectives:
 
@@ -194,15 +195,23 @@ Deliverables:
 - Run create/continue/delete flows.
 - Migration path for the current single-run storage.
 
-Status:
+Status: Completed foundation.
 
 - Added `nuzlocke-companion.run-library.v1` as the storage foundation for a collection of runs.
 - Kept `nuzlocke-companion.current-run` as the compatibility path for the current app flow.
 - `saveRun` mirrors future saves into the run library while still saving the current run.
 - `loadSavedRun` still reads only `current-run`.
 - `clearSavedRun` does not delete the run library.
-- There is no automatic migration from `current-run` to the run library yet.
-- The "Mis runs" UI and run selector remain future work.
+- Added a basic "Mis runs" screen that lists saved runs, continues a selected run, and deletes runs with confirmation.
+- Added a soft bridge from valid `current-run` data into the run library so existing active runs can appear in "Mis runs".
+- There is no destructive migration from `current-run` to the run library.
+
+Remaining future work:
+
+- Richer run management UI.
+- Import/export.
+- Thumbnails.
+- Cloud sync.
 
 ## Future: MainPlayScreen Refactor
 

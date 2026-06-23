@@ -139,11 +139,11 @@ This separation is in progress. `RuntimeConfig` now represents both legacy exter
 The app currently keeps the active play flow compatible with the original single-run storage key:
 
 - `nuzlocke-companion.current-run`: current compatibility path used by `loadSavedRun`, `saveRun`, and `clearSavedRun`.
-- `nuzlocke-companion.run-library.v1`: versioned local run library for future multi-run UI work.
+- `nuzlocke-companion.run-library.v1`: versioned local run library used by the basic "Mis runs" screen.
 
-`saveRun` still writes the current run to `current-run`, and now also upserts that run into the versioned run library. `loadSavedRun` still reads only `current-run`, so the current app flow does not change. `clearSavedRun` removes only `current-run` and does not clear the multi-run library.
+`saveRun` still writes the current run to `current-run`, and also upserts that run into the versioned run library. `loadSavedRun` still reads only `current-run`, so the active play flow remains compatible. `clearSavedRun` removes only `current-run` and does not clear the multi-run library.
 
-The run library validates stored entries before use and clears only its own versioned key if corrupted. There is no automatic migration from `current-run` into the library yet; that migration should be paired with a later user-facing "Mis runs" flow.
+The run library validates stored entries before use and clears only its own versioned key if corrupted. The "Mis runs" screen can continue or delete saved runs from the library. Opening the app softly mirrors a valid `current-run` into the library so existing users can see their active run, but it does not perform destructive migration and does not delete `current-run`.
 
 ### Runtime Model
 

@@ -38,6 +38,8 @@ import {
 type CreateRunScreenProps = {
   onBack: () => void;
   onCreate: (run: RunState) => void;
+  onOpenMyRuns: () => void;
+  hasRunLibrary: boolean;
 };
 
 type PlatformFilter = "all" | PokemonPlatform;
@@ -89,7 +91,12 @@ function getFileNameFromPath(path: string) {
   return path.split(/[\\/]/).pop() || "Archivo ROM asociado";
 }
 
-export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
+export function CreateRunScreen({
+  onBack,
+  onCreate,
+  onOpenMyRuns,
+  hasRunLibrary,
+}: CreateRunScreenProps) {
   const defaultPack = getGamePackByGameName("Pokémon FireRed");
   const [mode, setMode] = useState<CreateRunMode>("library");
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
@@ -317,6 +324,11 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
         <button className="secondary-button" type="button" onClick={onBack}>
           Cancelar
         </button>
+        {hasRunLibrary ? (
+          <button className="secondary-button" type="button" onClick={onOpenMyRuns}>
+            Mis runs
+          </button>
+        ) : null}
         <div>
           <p className="eyebrow">Biblioteca local</p>
           <h1>Nuzlocke Companion</h1>

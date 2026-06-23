@@ -4,6 +4,7 @@ import { cloneRunState } from "./runStateClone";
 import { isRecord, isRunState } from "./runStateValidation";
 
 const RUN_LIBRARY_STORAGE_KEY = "nuzlocke-companion.run-library.v1";
+const RUN_STORAGE_KEY = "nuzlocke-companion.current-run";
 
 export type RunLibraryEntry = {
   id: string;
@@ -119,6 +120,31 @@ export function deleteRunFromLibrary(runId: string): RunLibrary {
 
 export function clearRunLibrary(): void {
   window.localStorage.removeItem(RUN_LIBRARY_STORAGE_KEY);
+}
+
+export function ensureCurrentRunInLibrary(fallbackRun: RunState): RunLibrary {
+  void fallbackRun;
+
+  const library = loadRunLibrary();
+  const savedRun = window.localStorage.getItem(RUN_STORAGE_KEY);
+
+  if (!savedRun) {
+    return library;
+  }
+
+  try {
+    const parsedRun: unknown = JSON.parse(savedRun);
+
+    if (!isRunState(parsedRun)) {
+      window.localStorage.removeItem(RUN_STORAGE_KEY);
+      return library;
+    }
+
+    return upsertRunInLibrary(migrateLegacyEmulatorConfig(parsedRun));
+  } catch {
+    window.localStorage.removeItem(RUN_STORAGE_KEY);
+    return library;
+  }
 }
 
 function createRunLibraryEntry(
