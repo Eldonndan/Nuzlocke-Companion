@@ -6,17 +6,32 @@ Alcance: biblioteca Pokemon, asociacion local de ROM, creacion de runs por `game
 
 Regla de estado: no marcar una validacion como aprobada si no fue probada manualmente en la aplicacion.
 
+## Resultado QA manual
+
+QA manual realizado por el usuario antes de abrir PR.
+
+Resultado: aprobado.
+
+Notas:
+
+- El flujo de biblioteca funciona correctamente.
+- La asociacion de ROMs por juego funciona correctamente.
+- La creacion de runs desde biblioteca funciona correctamente.
+- El runtime interno funciona correctamente en el flujo probado.
+- Los visuales originales se muestran correctamente.
+- No se detectaron regresiones durante la prueba manual.
+
 ## Resumen de resultados
 
 | Area | Estado | Notas |
 |---|---|---|
-| Biblioteca | Pendiente | |
-| ROM library | Pendiente | |
-| Runtime interno | Pendiente | |
-| Visuales | Pendiente | |
-| Medallas | Pendiente | |
-| Overlay | Pendiente | |
-| Compatibilidad | Pendiente | |
+| Biblioteca | Aprobado | Validado manualmente por el usuario. |
+| ROM library | Aprobado | Asociacion por juego y persistencia funcionando. |
+| Runtime interno | Aprobado | Flujo validado manualmente con runtime interno. |
+| Visuales | Aprobado | Caratulas, consolas y medallas propias visibles correctamente. |
+| Medallas | Aprobado | Iconos y fallback funcionando. |
+| Overlay | Aprobado | Validado sin romper flujo existente. |
+| Compatibilidad | Aprobado | Sin regresiones detectadas en prueba manual. |
 
 ## 1. Biblioteca
 
