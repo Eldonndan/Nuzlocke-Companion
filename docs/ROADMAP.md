@@ -203,6 +203,7 @@ Status: Completed foundation.
 - `loadSavedRun` still reads only `current-run`.
 - `clearSavedRun` does not delete the run library.
 - Added a basic "Mis runs" screen that lists saved runs, continues a selected run, and deletes runs with confirmation.
+- "Mis runs" shows the most recently updated runs first and labels the active run.
 - Added a soft bridge from valid `current-run` data into the run library so existing active runs can appear in "Mis runs".
 - There is no destructive migration from `current-run` to the run library.
 

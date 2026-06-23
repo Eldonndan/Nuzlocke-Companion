@@ -3,6 +3,7 @@ import type { RunState } from "../shared/types";
 import {
   deleteRunFromLibrary,
   loadRunLibrary,
+  sortRunEntriesByUpdatedAt,
   type RunLibrary,
   type RunLibraryEntry,
 } from "../utils/runLibraryStorage";
@@ -37,6 +38,8 @@ export function MyRunsScreen({
   onCreateNewRun,
 }: MyRunsScreenProps) {
   const [library, setLibrary] = useState<RunLibrary>(() => loadRunLibrary());
+  const [message, setMessage] = useState("");
+  const sortedRuns = sortRunEntriesByUpdatedAt(library.runs);
 
   const deleteRun = (entry: RunLibraryEntry) => {
     const shouldDelete = window.confirm(
@@ -47,9 +50,11 @@ export function MyRunsScreen({
       return;
     }
 
+    const wasActiveRun = library.activeRunId === entry.id;
     const nextLibrary = deleteRunFromLibrary(entry.id);
     clearCurrentRunIfMatches(entry.id);
     setLibrary(nextLibrary);
+    setMessage(wasActiveRun ? "Run activa eliminada." : "Run eliminada.");
   };
 
   return (
@@ -64,6 +69,8 @@ export function MyRunsScreen({
         </div>
       </header>
 
+      {message ? <p className="my-runs-message">{message}</p> : null}
+
       {library.runs.length === 0 ? (
         <section className="empty-runs-card" aria-labelledby="empty-runs-title">
           <p className="eyebrow">Sin runs guardadas</p>
@@ -72,6 +79,8 @@ export function MyRunsScreen({
             Las runs nuevas se guardaran localmente y apareceran en esta lista
             para continuar despues.
           </p>
+          <p>Tus runs se guardan solo en este equipo.</p>
+          <p>La app no borra ROMs ni saves desde esta lista.</p>
           <button
             className="primary-button"
             type="button"
@@ -81,58 +90,72 @@ export function MyRunsScreen({
           </button>
         </section>
       ) : (
-        <section className="my-runs-grid" aria-label="Runs guardadas">
-          {library.runs.map((entry) => (
-            <article className="run-card" key={entry.id}>
-              <div>
-                <p className="eyebrow">{entry.platform}</p>
-                <h2>{entry.name}</h2>
-              </div>
+        <>
+          <section className="my-runs-grid" aria-label="Runs guardadas">
+            {sortedRuns.map((entry) => {
+              const isActiveRun = library.activeRunId === entry.id;
 
-              <dl className="run-card__meta">
-                <div>
-                  <dt>Juego</dt>
-                  <dd>{entry.gameName}</dd>
-                </div>
-                <div>
-                  <dt>Reto</dt>
-                  <dd>{entry.challengeType}</dd>
-                </div>
-                <div>
-                  <dt>Actualizada</dt>
-                  <dd>{formatUpdatedAt(entry.updatedAt)}</dd>
-                </div>
-                <div>
-                  <dt>Vidas</dt>
-                  <dd>{entry.run.lives}</dd>
-                </div>
-                <div>
-                  <dt>Medallas</dt>
-                  <dd>
-                    {getObtainedBadgeCount(entry)} / {entry.run.badges.length}
-                  </dd>
-                </div>
-              </dl>
+              return (
+                <article
+                  className={isActiveRun ? "run-card run-card--active" : "run-card"}
+                  key={entry.id}
+                >
+                  <div>
+                    <div className="run-card__header">
+                      <p className="eyebrow">{entry.platform}</p>
+                      {isActiveRun ? (
+                        <span className="run-card__badge">Activa</span>
+                      ) : null}
+                    </div>
+                    <h2>{entry.name}</h2>
+                  </div>
 
-              <div className="run-card__actions">
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => onContinueRun(entry.run)}
-                >
-                  Continuar
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => deleteRun(entry)}
-                >
-                  Eliminar
-                </button>
-              </div>
-            </article>
-          ))}
-        </section>
+                  <dl className="run-card__meta">
+                    <div>
+                      <dt>Juego</dt>
+                      <dd>{entry.gameName}</dd>
+                    </div>
+                    <div>
+                      <dt>Reto</dt>
+                      <dd>{entry.challengeType}</dd>
+                    </div>
+                    <div>
+                      <dt>Actualizada</dt>
+                      <dd>{formatUpdatedAt(entry.updatedAt)}</dd>
+                    </div>
+                    <div>
+                      <dt>Vidas</dt>
+                      <dd>{entry.run.lives}</dd>
+                    </div>
+                    <div>
+                      <dt>Medallas</dt>
+                      <dd>
+                        {getObtainedBadgeCount(entry)} / {entry.run.badges.length}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="run-card__actions">
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => onContinueRun(entry.run)}
+                    >
+                      Continuar
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => deleteRun(entry)}
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        </>
       )}
     </main>
   );
