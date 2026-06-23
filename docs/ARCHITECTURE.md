@@ -145,6 +145,8 @@ The app currently keeps the active play flow compatible with the original single
 
 The run library validates stored entries before use and clears only its own versioned key if corrupted. The "Mis runs" screen can continue or delete saved runs from the library. Opening the app softly mirrors a valid `current-run` into the library so existing users can see their active run, but it does not perform destructive migration and does not delete `current-run`.
 
+`App` also keeps an in-memory `activeRun` for the current navigation session. Creating a run, continuing from "Mis runs", or continuing the saved `current-run` sets that value before entering `MainPlayScreen`. `sampleRun` remains a development fallback, while normal navigation now passes the selected run explicitly.
+
 ### Runtime Model
 
 The code now uses `RuntimeConfig` as the forward-compatible runtime configuration model.
