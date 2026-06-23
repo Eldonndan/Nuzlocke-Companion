@@ -59,6 +59,8 @@ New library-created runs use the internal Libretro runtime by default. Legacy ex
 Open `Mis runs` from the home screen or the run creation screen to view locally saved runs.
 
 - Use `Continuar` to make a saved run the current run and enter the play screen.
+- The most recently updated runs appear first.
+- The active run is labeled `Activa`.
 - Use `Eliminar` to remove a run from the local run library after confirmation.
 
 Deleting a run from `Mis runs` does not delete ROMs, BIOS files, cores, or battery-save files. The app still keeps `current-run` compatibility for the active flow.

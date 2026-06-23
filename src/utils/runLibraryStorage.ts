@@ -79,6 +79,12 @@ export function upsertRunInLibrary(run: RunState): RunLibrary {
 
 export function setActiveRunId(runId: string): RunLibrary {
   const library = loadRunLibrary();
+  const runExists = library.runs.some((entry) => entry.id === runId);
+
+  if (!runExists) {
+    return cloneRunLibrary(library);
+  }
+
   const nextLibrary = {
     ...library,
     activeRunId: runId,
@@ -145,6 +151,31 @@ export function ensureCurrentRunInLibrary(fallbackRun: RunState): RunLibrary {
     window.localStorage.removeItem(RUN_STORAGE_KEY);
     return library;
   }
+}
+
+export function sortRunEntriesByUpdatedAt(
+  entries: RunLibraryEntry[],
+): RunLibraryEntry[] {
+  return [...entries].sort((firstEntry, secondEntry) => {
+    const firstTime = Date.parse(firstEntry.updatedAt);
+    const secondTime = Date.parse(secondEntry.updatedAt);
+    const firstIsValid = Number.isFinite(firstTime);
+    const secondIsValid = Number.isFinite(secondTime);
+
+    if (!firstIsValid && !secondIsValid) {
+      return 0;
+    }
+
+    if (!firstIsValid) {
+      return 1;
+    }
+
+    if (!secondIsValid) {
+      return -1;
+    }
+
+    return secondTime - firstTime;
+  });
 }
 
 function createRunLibraryEntry(

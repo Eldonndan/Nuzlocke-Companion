@@ -1665,6 +1665,31 @@ h3 {
   padding: 18px;
 }
 
+.run-card--active {
+  border-color: rgba(96, 165, 250, 0.72);
+  box-shadow:
+    0 0 0 1px rgba(96, 165, 250, 0.24),
+    0 20px 40px rgba(15, 23, 42, 0.22);
+}
+
+.run-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.run-card__badge {
+  border: 1px solid rgba(96, 165, 250, 0.5);
+  border-radius: 999px;
+  background: rgba(96, 165, 250, 0.14);
+  color: #bfdbfe;
+  font-size: 0.76rem;
+  font-weight: 900;
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
 .run-card h2,
 .empty-runs-card h2 {
   margin: 0;
@@ -1707,6 +1732,16 @@ h3 {
   margin: 24px auto 0;
   max-width: 620px;
   padding: 28px;
+}
+
+.my-runs-message {
+  margin: 18px 0 0;
+  border: 1px solid rgba(74, 222, 128, 0.26);
+  border-radius: 8px;
+  background: rgba(22, 163, 74, 0.12);
+  color: #bbf7d0;
+  font-weight: 800;
+  padding: 10px 12px;
 }
 
 .library-toolbar {
