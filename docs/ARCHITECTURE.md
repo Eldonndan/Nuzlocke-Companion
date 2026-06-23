@@ -486,6 +486,28 @@ Configured internal runs auto boot into the native-paced Libretro session. The m
 
 Audio is currently an auto-armed Web Audio debug path, not the final synchronized audio pipeline. Input is scoped to the gameplay frame and internal panel, with no global keyboard listeners. SRAM support persists Libretro battery save memory and is explicitly not a save state. Closing the app with an active internal session attempts to stop the runtime and autosave SRAM before closing. Legacy external mGBA mode remains available as a fallback.
 
+### Pokemon Game Library Flow
+
+The create-run flow now starts from a static local catalog of Pokemon GB/GBC/GBA games. Each catalog entry has app-owned metadata such as title, console, generation, region, release group, and visual accent. Cards use original UI styling, text, color, and initials only; the app does not include official box art, screenshots, ROMs, BIOS files, cores, or copyrighted game assets.
+
+The local ROM library stores only `gameId -> romPath` associations in browser local storage. Selecting or changing a ROM opens the existing system file picker and saves the chosen local path; the app does not copy, scan, hash, download, or modify ROM files. The main library cards show ROM readiness and the selected file name, not the full local path. Games without an associated ROM stay visually disabled and ask the user to assign a ROM first.
+
+Once a ROM is associated, the user configures a small Nuzlocke starter setup with lives and creates an internal Libretro run from the selected `gameId`, platform, game title, and associated ROM path. Core path and save directory remain runtime-local configuration; if core setup is still missing, the existing guided internal runtime setup asks for it when the play screen opens.
+
+The library UI is the main product entry point for new runs. It presents console filters, visual ROM readiness states, and a small run setup panel before creating the internal run. Technical local paths stay out of the primary cards; the flow shows the associated file name, runtime readiness, and the next playable action instead.
+
+The visual catalog and run data are separate layers. Catalog entries provide the user-facing game list, while game packs provide basic run data such as badges and an initial level cap. Library-created runs resolve game packs by stable `gameId` first, with title matching kept only as compatibility fallback for older/manual flows. Detailed route data is intentionally out of scope for this milestone.
+
+Library visuals are app-owned React/SVG/CSS artwork. Console icons, game cover cards, and badge icons are simple original interface elements derived from platform, region, generation, accent, and badge theme metadata. They do not use official box art, logos, sprites, screenshots, medal designs, or downloaded assets.
+
+### Internal Runtime Local Preferences
+
+The app stores local internal runtime preferences separately from the Pokemon ROM library. These preferences include the selected Libretro core target, local core path, and optional save directory. They never include a global ROM path; ROMs remain associated per game through `gameId -> romPath`.
+
+Preferences only prefill empty internal runtime configs. Existing run-specific `corePath`, `romPath`, and `saveDirectory` values are respected, and applying preferences never changes `romPath`. The setup panel saves preferences explicitly from "Guardar y jugar" and lets the user forget them without changing the current run.
+
+The preference layer records local paths only. It does not copy, scan, download, or bundle cores, ROMs, BIOS files, or save files.
+
 ### Future Social / Share Layer
 
 Social and sharing features are future-facing and should not shape the initial runtime implementation. The architecture should leave room for:
