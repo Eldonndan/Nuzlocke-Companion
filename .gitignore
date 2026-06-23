@@ -6,3 +6,19 @@ src-tauri/target/
 .env.*
 
 *.log
+
+# Local game/runtime assets
+roms/
+cores/
+saves/
+*.gba
+*.gb
+*.gbc
+*.nds
+*.3ds
+*.cia
+*.sav
+*.srm
+*.state
+*.rtc
+*.mgba

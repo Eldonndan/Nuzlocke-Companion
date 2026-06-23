@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { EmulatorConfigPanel } from "../components/emulator/EmulatorConfigPanel";
 import { gamePacks, getGamePackByGameName } from "../data/gamePacks";
-import type { EmulatorConfig, RunState } from "../shared/types";
+import type { RunState, RuntimeConfig } from "../shared/types";
 import {
   selectEmulatorExecutable,
+  selectLibretroCoreFile,
   selectRomFile,
+  selectSaveDirectory,
 } from "../utils/emulatorCommands";
 import { createRunState } from "../utils/createRunState";
 import { hasSavedRun } from "../utils/runStorage";
+import { createDefaultInternalLibretroRuntimeConfig } from "../utils/runtimeConfig";
 
 type CreateRunScreenProps = {
   onBack: () => void;
@@ -47,39 +50,44 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
   const [levelCap, setLevelCap] = useState(
     defaultPack?.defaultInitialLevelCap ?? 5,
   );
-  const [emulatorConfig, setEmulatorConfig] = useState<EmulatorConfig>({
-    type: "mgba",
-    executablePath: "",
-    romPath: "",
-    launchArgs: [],
-  });
+  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>(() =>
+    createDefaultInternalLibretroRuntimeConfig(),
+  );
   const [error, setError] = useState("");
 
   const chooseEmulator = async () => {
     try {
-      const selectedPath = await selectEmulatorExecutable();
-      if (selectedPath) {
-        setEmulatorConfig((currentConfig) => ({
-          ...currentConfig,
-          executablePath: selectedPath,
-        }));
-      }
+      return await selectEmulatorExecutable();
     } catch {
       setError("No se pudo abrir el selector del emulador.");
+      return null;
     }
   };
 
   const chooseRom = async () => {
     try {
-      const selectedPath = await selectRomFile();
-      if (selectedPath) {
-        setEmulatorConfig((currentConfig) => ({
-          ...currentConfig,
-          romPath: selectedPath,
-        }));
-      }
+      return await selectRomFile();
     } catch {
       setError("No se pudo abrir el selector de ROM.");
+      return null;
+    }
+  };
+
+  const chooseLibretroCore = async () => {
+    try {
+      return await selectLibretroCoreFile();
+    } catch {
+      setError("No se pudo abrir el selector del core Libretro.");
+      return null;
+    }
+  };
+
+  const chooseSaveDirectory = async () => {
+    try {
+      return await selectSaveDirectory();
+    } catch {
+      setError("No se pudo abrir el selector del directorio de guardado.");
+      return null;
     }
   };
 
@@ -132,9 +140,7 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
         platform,
         gameName,
         challengeType,
-        emulatorPath: emulatorConfig.executablePath,
-        romPath: emulatorConfig.romPath,
-        launchArgs: emulatorConfig.launchArgs,
+        runtimeConfig,
         lives,
         routeName,
         levelCap,
@@ -256,10 +262,12 @@ export function CreateRunScreen({ onBack, onCreate }: CreateRunScreenProps) {
         </div>
 
         <EmulatorConfigPanel
-          config={emulatorConfig}
-          onChange={setEmulatorConfig}
+          config={runtimeConfig}
+          onChange={setRuntimeConfig}
           onSelectEmulator={chooseEmulator}
           onSelectRom={chooseRom}
+          onSelectCore={chooseLibretroCore}
+          onSelectSaveDirectory={chooseSaveDirectory}
         />
 
         {error ? <p className="form-error">{error}</p> : null}

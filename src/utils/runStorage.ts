@@ -6,7 +6,9 @@ import type {
   PokemonSlot,
   Route,
   RunState,
+  RuntimeConfig,
 } from "../shared/types";
+import { migrateLegacyEmulatorConfig } from "./runtimeConfig";
 
 const RUN_STORAGE_KEY = "nuzlocke-companion.current-run";
 const captureStatuses: CaptureStatus[] = [
@@ -41,14 +43,17 @@ export function loadSavedRun(fallbackRun: RunState): RunState {
       return cloneRunState(fallbackRun);
     }
 
-    return cloneRunState(parsedRun);
+    return cloneRunState(migrateLegacyEmulatorConfig(parsedRun));
   } catch {
     return cloneRunState(fallbackRun);
   }
 }
 
 export function saveRun(run: RunState) {
-  window.localStorage.setItem(RUN_STORAGE_KEY, JSON.stringify(run));
+  window.localStorage.setItem(
+    RUN_STORAGE_KEY,
+    JSON.stringify(migrateLegacyEmulatorConfig(run)),
+  );
 }
 
 export function hasSavedRun() {
@@ -71,6 +76,7 @@ function isRunState(value: unknown): value is RunState {
     optionalString(value.gamePackId) &&
     typeof value.gameName === "string" &&
     typeof value.challengeType === "string" &&
+    (value.runtimeConfig === undefined || isRuntimeConfig(value.runtimeConfig)) &&
     (value.emulatorConfig === undefined || isEmulatorConfig(value.emulatorConfig)) &&
     (value.captureWindow === undefined || isCaptureWindow(value.captureWindow)) &&
     typeof value.lives === "number" &&
@@ -101,13 +107,33 @@ function isCaptureWindow(value: unknown): value is CaptureWindow {
 function isEmulatorConfig(value: unknown): value is EmulatorConfig {
   return (
     isRecord(value) &&
-    value.type === "mgba" &&
+    (value.mode === undefined || value.mode === "legacy-external") &&
+    (value.emulatorType === undefined || value.emulatorType === "mgba") &&
+    (value.type === undefined || value.type === "mgba") &&
     typeof value.executablePath === "string" &&
     typeof value.romPath === "string" &&
     (value.launchArgs === undefined ||
       (Array.isArray(value.launchArgs) &&
         value.launchArgs.every((launchArg) => typeof launchArg === "string"))) &&
     optionalNumber(value.lastLaunchedProcessId)
+  );
+}
+
+function isRuntimeConfig(value: unknown): value is RuntimeConfig {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (value.mode === "legacy-external") {
+    return isEmulatorConfig(value);
+  }
+
+  return (
+    value.mode === "internal-libretro" &&
+    value.core === "mgba" &&
+    typeof value.corePath === "string" &&
+    typeof value.romPath === "string" &&
+    optionalString(value.saveDirectory)
   );
 }
 

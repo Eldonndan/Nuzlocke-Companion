@@ -1,68 +1,58 @@
-# Captura, overlay y modo acoplado
+# Legacy Capture, Overlay, and Docked Mode
 
-Nuzlocke Companion usa mGBA como emulador recomendado para la primera ruta GBA. La app no incluye emuladores, ROMs, BIOS ni archivos de juego; el usuario configura sus propios archivos.
+This document describes the current external emulator prototype. It is retained as legacy/experimental documentation while Nuzlocke Companion moves toward an internal emulation frontend.
 
-## Decision de producto
+## Current Product Status
 
-El modo recomendado es `Modo acoplado`.
+The previous recommended flow was `Modo acoplado`: launch or find mGBA, detect its window, and dock the real mGBA window inside the Nuzlocke Companion gameplay frame.
 
-En este modo, la app no intenta convertir mGBA en frames de imagen dentro de React. En vez de eso:
+That path remains useful as a fallback and testing mode, but it is no longer the target product direction. The target direction is internal emulation hosted by Nuzlocke Companion, initially focused on GB/GBC/GBA and mGBA via Libretro research.
 
-- busca o lanza mGBA;
-- detecta su ventana real;
-- acopla el HWND de mGBA dentro del cuadro de juego de Nuzlocke Companion;
-- mantiene mGBA como renderer nativo y como destino real de input.
+## What Legacy Docked Mode Does
 
-Esto evita la perdida de rendimiento y latencia que aparece cuando cada frame debe cruzar Rust, WebView y React.
+In docked mode, the app:
 
-## Por que captura es experimental
+- Finds an already open mGBA window or launches mGBA with the user's configured ROM.
+- Detects the mGBA top-level window.
+- Reparents the mGBA HWND into the gameplay frame of the main Tauri window on Windows.
+- Resizes the child window to match the gameplay rectangle.
+- Keeps mGBA as the real renderer and input target.
+- Keeps the React UI around the gameplay area for Equipo, Vidas, Medallas, Ruta actual, Captura, and Limite de nivel.
 
-El prototipo de captura continua demostro limites importantes:
+## Why Capture Is Experimental
 
-- 60 FPS configurados no necesariamente se sienten como 60 FPS reales por el coste de transporte y render;
-- enviar frames como PNG/base64 o buffers hacia la WebView agrega trabajo por frame;
-- reenviar input desde React hacia el emulador agrega complejidad y latencia.
+The capture prototype showed important limits:
 
-Por eso la captura queda como modo experimental/debug, no como flujo principal.
+- 60 FPS configured is not always perceived as stable 60 FPS because frame data crosses Rust, WebView, and React.
+- PNG/base64 or raw-buffer transport adds work per frame.
+- Forwarding input from React back to the emulator adds complexity and latency.
+- Capture makes the app feel like a wrapper around another emulator instead of a focused play frontend.
 
-## Captura disponible
+For those reasons, capture should remain experimental/debug functionality.
 
-Se conserva:
+## Capture Still Available
 
-- `capture_window_frame(window_id)` con GDI para `Capturar frame de prueba`;
-- sesion Windows Graphics Capture con `windows-capture`;
-- render en canvas dentro de la ventana principal.
+The current code keeps:
 
-La UI debe nombrarlo como `Modo captura experimental`.
+- `capture_window_frame(window_id)` with GDI for still-frame tests.
+- Windows Graphics Capture live sessions through `windows-capture`.
+- Canvas rendering in the main window.
 
-## Modo acoplado
+The UI should continue to present this as `Modo captura experimental`.
 
-El modo acoplado es Windows-first y mGBA-first.
+## Overlay Mode
 
-Rust usa APIs Win32 para reparentar la ventana:
+Overlay mode remains available for testing and fallback use. It creates a transparent, always-on-top Tauri window at `index.html?overlay=1`.
 
-- `SetParent` para convertir mGBA en ventana hija de la ventana principal;
-- `GetWindowLongPtrW` y `SetWindowLongPtrW` para cambiar estilos de ventana;
-- `SetWindowPos` para ajustar posicion y tamano;
-- `GetWindowRect` y `GetParent` para guardar estado anterior y calcular coordenadas relativas al padre.
+In normal use it can ignore cursor events so mGBA receives input. In edit mode it accepts clicks and exposes compact run controls.
 
-Al desacoplar, la app restaura padre, estilos y posicion anterior. El frontend tambien intenta desacoplar cuando el usuario cambia la configuracion del emulador, restablece la run o sale hacia `Nueva run`.
+## Windows Limitations
 
-## Overlay secundario
+- Docked mode depends on Win32 APIs and currently does not apply to macOS/Linux.
+- If mGBA runs as administrator and Nuzlocke Companion does not, Windows can block window reparenting.
+- DPI and display scaling can require additional handling.
+- Some emulators can resist reparenting or redraw incorrectly after style changes.
 
-El overlay sigue disponible para pruebas y como alternativa. Es una ventana Tauri transparente, always-on-top y sin decoracion. En modo normal usa click-through para dejar que mGBA reciba input; en modo edicion acepta clicks y permite ajustes rapidos.
+## Legacy Scope
 
-## Limitaciones Windows
-
-- El modo acoplado depende de APIs Win32 y por ahora no aplica a macOS/Linux.
-- Si mGBA corre como administrador y Nuzlocke Companion no, Windows puede bloquear `SetParent`. Ejecuta ambos con el mismo nivel de permisos.
-- DPI y escalado de pantalla pueden requerir ajustes finos en algunos monitores.
-- Algunos emuladores pueden resistir el reparenting o redibujar mal al cambiar estilos.
-- El siguiente refinamiento es acoplar solo el area cliente real de mGBA para evitar barras/menu si aparecen.
-
-## Siguientes pasos
-
-1. Mejorar calculo DPI y area cliente.
-2. Agregar medicion visual de estabilidad del modo acoplado.
-3. Soportar mas emuladores con adaptadores por plataforma.
-4. Mantener captura experimental para diagnostico, no como experiencia principal.
+Keep this mode while it is useful, but avoid expanding it unless needed to preserve the existing prototype. New architecture should prioritize the internal emulation runtime described in `docs/ADR-0001-product-direction.md` and `docs/ARCHITECTURE.md`.

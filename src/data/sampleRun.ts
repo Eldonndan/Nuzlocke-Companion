@@ -72,8 +72,9 @@ export const sampleRun: RunState = {
   gamePackId: fireRedPack?.id,
   gameName: "Pokémon FireRed",
   challengeType: "Hardcore Nuzlocke",
-  emulatorConfig: {
-    type: "mgba",
+  runtimeConfig: {
+    mode: "legacy-external",
+    emulatorType: "mgba",
     executablePath: "",
     romPath: "",
     launchArgs: [],

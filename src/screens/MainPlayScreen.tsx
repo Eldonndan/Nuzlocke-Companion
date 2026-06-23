@@ -1,8 +1,21 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { EmulatorConfigPanel } from "../components/emulator/EmulatorConfigPanel";
+import { InternalRuntimeDisplayController } from "../components/emulator/InternalRuntimeDisplayController";
+import {
+  InternalRuntimeFramePreview,
+  type InternalRuntimeFramePreviewHandle,
+} from "../components/emulator/InternalRuntimeFramePreview";
 import { QuickEditPanel } from "../components/edit/QuickEditPanel";
-import { GameplayFrame } from "../components/layout/GameplayFrame";
+import {
+  GameplayFrame,
+  getConsoleViewportProfileForPlatform,
+} from "../components/layout/GameplayFrame";
+import {
+  InternalPlaySidePanel,
+  type InternalPlayTab,
+} from "../components/layout/InternalPlaySidePanel";
 import { BadgePanel } from "../components/status/BadgePanel";
 import { CaptureStatusPanel } from "../components/status/CaptureStatusPanel";
 import { LevelCapPanel } from "../components/status/LevelCapPanel";
@@ -16,8 +29,8 @@ import type {
   CaptureStatus,
   CaptureWindow,
   DockedWindowInfo,
-  EmulatorConfig,
   HostRect,
+  RuntimeConfig,
   LiveCaptureFrame,
   OverlayAction,
   PokemonSlot,
@@ -37,7 +50,9 @@ import {
   positionEmulatorWindow,
   positionOverlayWindow,
   selectEmulatorExecutable,
+  selectLibretroCoreFile,
   selectRomFile,
+  selectSaveDirectory,
   setOverlayClickThrough,
   showOverlay,
   showMainWindow,
@@ -52,6 +67,29 @@ import {
   loadSavedRun,
   saveRun,
 } from "../utils/runStorage";
+import type {
+  InternalFrameInfo,
+  InternalFrameSnapshotBase64,
+  InternalRuntimeStatus,
+} from "../utils/internalRuntimeCommands";
+import {
+  clearInternalRuntimeJoypadButtons,
+  loadInternalRuntimeSaveMemoryFromDisk,
+  pauseInternalRuntime,
+  refreshInternalRuntimeSaveMemoryInfo,
+  resumeInternalRuntime,
+  saveInternalRuntimeMemoryToDisk,
+  startInternalRuntime,
+  stopInternalRuntime,
+} from "../utils/internalRuntimeCommands";
+import { keyboardControlHints } from "../utils/internalInputMapping";
+import {
+  createDefaultLegacyExternalRuntimeConfig,
+  getRunRuntimeConfig,
+  isInternalLibretroRuntime,
+  isLegacyExternalRuntime,
+  withRunRuntimeConfig,
+} from "../utils/runtimeConfig";
 
 type MainPlayScreenProps = {
   run: RunState;
@@ -69,6 +107,8 @@ const captureStatusOrder: CaptureStatus[] = [
 
 const fpsOptions: CaptureFps[] = [30, 60];
 const overlayLayoutStorageKey = "nuzlocke-companion.overlay-layout";
+const legacyExternalOnlyMessage =
+  "Esta acción pertenece al modo legacy externo. El runtime interno se controla desde el panel Libretro.";
 
 type OverlayLayout = {
   x: number;
@@ -90,15 +130,6 @@ function getNextLevelCap(badges: Badge[]) {
 
   const nextBadge = badgesWithCaps.find((badge) => !badge.obtained);
   return nextBadge?.levelCap ?? badgesWithCaps[badgesWithCaps.length - 1].levelCap;
-}
-
-function createEmptyEmulatorConfig(): EmulatorConfig {
-  return {
-    type: "mgba",
-    executablePath: "",
-    romPath: "",
-    launchArgs: [],
-  };
 }
 
 function wait(milliseconds: number) {
@@ -161,6 +192,26 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const [sessionStatus, setSessionStatus] = useState("");
   const [capturedFrame, setCapturedFrame] = useState<CapturedFrame | null>(null);
   const [liveFrame, setLiveFrame] = useState<LiveCaptureFrame | null>(null);
+  const [internalFrameSnapshotBase64, setInternalFrameSnapshotBase64] =
+    useState<InternalFrameSnapshotBase64 | null>(null);
+  const [internalFrameInfo, setInternalFrameInfo] =
+    useState<InternalFrameInfo | null>(null);
+  const [internalRuntimeStatus, setInternalRuntimeStatus] =
+    useState<InternalRuntimeStatus | null>(null);
+  const [internalCanvas, setInternalCanvas] =
+    useState<HTMLCanvasElement | null>(null);
+  const [isInternalDebugLoopRunning, setIsInternalDebugLoopRunning] =
+    useState(false);
+  const [isInternalDebugPanelCollapsed, setIsInternalDebugPanelCollapsed] =
+    useState(false);
+  const [internalAudioStateLabel, setInternalAudioStateLabel] =
+    useState("Audio: armado");
+  const [isInternalKeyboardFocused, setIsInternalKeyboardFocused] =
+    useState(false);
+  const [isInternalShutdownInProgress, setIsInternalShutdownInProgress] =
+    useState(false);
+  const [internalPlayTab, setInternalPlayTab] =
+    useState<InternalPlayTab>("runtime");
   const [frameStatus, setFrameStatus] = useState("");
   const [captureFps, setCaptureFps] = useState<CaptureFps>(30);
   const [captureSession, setCaptureSession] = useState<CaptureSessionStatus | null>(null);
@@ -175,15 +226,282 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   const hasSavedInitialRun = useRef(false);
   const isTestFrameRequestInFlight = useRef(false);
   const gameplayScreenRef = useRef<HTMLDivElement | null>(null);
+  const internalRuntimePreviewRef =
+    useRef<InternalRuntimeFramePreviewHandle | null>(null);
+  const isInternalRuntimeRef = useRef(false);
+  const isInternalNativeSessionActiveRef = useRef(false);
+  const isInternalShutdownInProgressRef = useRef(false);
+  const shouldCloseAfterInternalShutdownRef = useRef(false);
+  const autoOpenedInternalConfigKeyRef = useRef("");
   const dockResizeTimeoutRef = useRef<number | null>(null);
   const dockedWindowIdRef = useRef<string | null>(null);
 
   const editingPokemon =
     editingSlotIndex === null ? null : runState.team[editingSlotIndex];
-  const emulatorConfig = runState.emulatorConfig ?? createEmptyEmulatorConfig();
-  const hasEmulatorConfigured = Boolean(
+  const runtimeConfig = getRunRuntimeConfig(runState);
+  const consoleProfile = getConsoleViewportProfileForPlatform(runState.platform);
+  const isLegacyRuntime = isLegacyExternalRuntime(runtimeConfig);
+  const isInternalRuntime = isInternalLibretroRuntime(runtimeConfig);
+  const emulatorConfig = isLegacyRuntime
+    ? runtimeConfig
+    : createDefaultLegacyExternalRuntimeConfig();
+  const hasEmulatorConfigured = isLegacyRuntime && Boolean(
     emulatorConfig.executablePath && emulatorConfig.romPath,
   );
+  const hasInternalRuntimeConfigured = isInternalRuntime && Boolean(
+    runtimeConfig.corePath && runtimeConfig.romPath,
+  );
+  const internalConfigAutoOpenKey = isInternalRuntime
+    ? `${runtimeConfig.corePath.trim()}|${runtimeConfig.romPath.trim()}`
+    : "legacy";
+  const disableInternalDestructiveActions =
+    isInternalRuntime &&
+    (isInternalDebugLoopRunning ||
+      Boolean(internalRuntimeStatus?.sessionInfo?.isActive) ||
+      isInternalShutdownInProgress);
+  const isInternalNativeSessionActive = Boolean(
+    internalRuntimeStatus?.sessionInfo?.isActive,
+  );
+  const isInternalNativeSessionPaused = Boolean(
+    internalRuntimeStatus?.sessionInfo?.isPaused,
+  );
+  const internalSessionLabel = isInternalNativeSessionActive
+    ? isInternalNativeSessionPaused
+      ? "Pausada"
+      : "Activa"
+    : "Detenida";
+  const saveRamInfo = internalRuntimeStatus?.saveMemory.find(
+    (memory) => memory.kind === "save-ram",
+  );
+  const lastSaveOperation = internalRuntimeStatus?.lastSaveOperation ?? null;
+  const disableInternalSaveActions =
+    isInternalDebugLoopRunning ||
+    isInternalNativeSessionActive ||
+    isInternalShutdownInProgress;
+
+  isInternalRuntimeRef.current = isInternalRuntime;
+  isInternalNativeSessionActiveRef.current = isInternalNativeSessionActive;
+  isInternalShutdownInProgressRef.current = isInternalShutdownInProgress;
+
+  const applyInternalRuntimeStatus = (status: InternalRuntimeStatus) => {
+    setInternalRuntimeStatus(status);
+
+    if (status.lastSaveOperation?.message) {
+      const savePath = status.lastSaveOperation.filePath
+        ? ` ${status.lastSaveOperation.filePath}`
+        : "";
+      setSessionStatus(`${status.lastSaveOperation.message}${savePath}`);
+    }
+  };
+
+  const ensureLegacyExternalRuntime = () => {
+    if (isLegacyRuntime) {
+      return true;
+    }
+
+    setSessionStatus(legacyExternalOnlyMessage);
+    setOverlayStatus(legacyExternalOnlyMessage);
+    return false;
+  };
+
+  const ensureInternalDebugLoopStopped = (actionLabel: string) => {
+    if (
+      isInternalRuntime &&
+      (isInternalDebugLoopRunning || isInternalNativeSessionActive)
+    ) {
+      setSessionStatus(`Deten la sesion interna antes de ${actionLabel}.`);
+      return false;
+    }
+
+    return true;
+  };
+
+  const stopInternalRuntimeForAutosave = async (context: string) => {
+    if (!isInternalRuntime) {
+      return true;
+    }
+
+    try {
+      const nextStatus = await stopInternalRuntime();
+      applyInternalRuntimeStatus(nextStatus);
+
+      if (nextStatus.lastSaveOperation?.saved) {
+        setSessionStatus(
+          `Autosave SRAM completado: ${nextStatus.lastSaveOperation.filePath}`,
+        );
+      }
+
+      return true;
+    } catch (error) {
+      setSessionStatus(
+        typeof error === "string"
+          ? error
+          : `No se pudo detener el runtime interno antes de ${context}.`,
+      );
+      return false;
+    }
+  };
+
+  const stopInternalRuntimeBeforeWindowClose = async () => {
+    if (isInternalShutdownInProgressRef.current) {
+      setSessionStatus("Guardando SRAM antes de cerrar...");
+      return;
+    }
+
+    isInternalShutdownInProgressRef.current = true;
+    setIsInternalShutdownInProgress(true);
+    setSessionStatus("Guardando SRAM antes de cerrar...");
+
+    try {
+      const nextStatus = await stopInternalRuntime();
+      applyInternalRuntimeStatus(nextStatus);
+
+      if (nextStatus.lastSaveOperation?.saved) {
+        setSessionStatus(
+          `SRAM guardada. Cerrando... ${nextStatus.lastSaveOperation.filePath}`,
+        );
+      } else {
+        setSessionStatus("Sesion detenida. Cerrando...");
+      }
+
+      shouldCloseAfterInternalShutdownRef.current = true;
+      await getCurrentWindow().destroy();
+    } catch (error) {
+      shouldCloseAfterInternalShutdownRef.current = false;
+      isInternalShutdownInProgressRef.current = false;
+      setIsInternalShutdownInProgress(false);
+      const errorMessage =
+        typeof error === "string"
+          ? error
+          : "Deten la sesion manualmente o revisa el directorio de guardado.";
+      setSessionStatus(
+        `No se pudo guardar SRAM antes de cerrar. ${errorMessage}`,
+      );
+    }
+  };
+
+  const runInternalSaveAction = async (
+    action: () => Promise<InternalRuntimeStatus>,
+    fallbackMessage: string,
+  ) => {
+    if (disableInternalSaveActions) {
+      setSessionStatus(
+        "Deten la sesion interna antes de guardar o cargar SRAM manualmente.",
+      );
+      return;
+    }
+
+    try {
+      const nextStatus = await action();
+      applyInternalRuntimeStatus(nextStatus);
+      setSessionStatus(
+        nextStatus.lastSaveOperation?.message ?? fallbackMessage,
+      );
+    } catch (error) {
+      setSessionStatus(
+        typeof error === "string"
+          ? error
+          : "No se pudo completar la operacion de SRAM.",
+      );
+    }
+  };
+
+  const runInternalSessionAction = async (
+    action: () => Promise<InternalRuntimeStatus>,
+    successMessage: string,
+  ) => {
+    try {
+      const nextStatus = await action();
+      applyInternalRuntimeStatus(nextStatus);
+      setSessionStatus(successMessage);
+    } catch (error) {
+      setSessionStatus(
+        typeof error === "string"
+          ? error
+          : "No se pudo cambiar la sesion interna.",
+      );
+    }
+  };
+
+  const startInternalSession = () =>
+    runInternalSessionAction(startInternalRuntime, "Sesion interna iniciada.");
+
+  const pauseInternalSession = () =>
+    runInternalSessionAction(pauseInternalRuntime, "Sesion interna pausada.");
+
+  const resumeInternalSession = () =>
+    runInternalSessionAction(resumeInternalRuntime, "Sesion interna continuada.");
+
+  const stopInternalSession = async () => {
+    try {
+      const nextStatus = await stopInternalRuntime();
+      applyInternalRuntimeStatus(nextStatus);
+      if (nextStatus.lastSaveOperation?.saved) {
+        setSessionStatus(
+          `Autosave SRAM completado: ${nextStatus.lastSaveOperation.filePath}`,
+        );
+      } else {
+        setSessionStatus("Sesion interna detenida.");
+      }
+    } catch (error) {
+      setSessionStatus(
+        typeof error === "string"
+          ? error
+          : "No se pudo detener la sesion interna.",
+      );
+    }
+  };
+
+  const toggleInternalAudio = async () => {
+    try {
+      if (internalAudioStateLabel === "Audio: activo") {
+        await internalRuntimePreviewRef.current?.disableAudioDebug();
+        setSessionStatus("Audio apagado.");
+        return;
+      }
+
+      await internalRuntimePreviewRef.current?.enableAudioDebug();
+      setSessionStatus("Audio activo.");
+    } catch (error) {
+      setSessionStatus(
+        typeof error === "string"
+          ? error
+          : "No se pudo cambiar el audio interno.",
+      );
+    }
+  };
+
+  const clearInternalHeldButtons = async () => {
+    try {
+      const nextStatus = await clearInternalRuntimeJoypadButtons();
+      applyInternalRuntimeStatus(nextStatus);
+      setSessionStatus("Botones soltados.");
+    } catch (error) {
+      setSessionStatus(
+        typeof error === "string"
+          ? error
+          : "No se pudieron soltar los botones.",
+      );
+    }
+  };
+
+  const refreshInternalSaveMemory = () =>
+    runInternalSaveAction(
+      refreshInternalRuntimeSaveMemoryInfo,
+      "Memoria de guardado actualizada.",
+    );
+
+  const loadInternalSaveMemory = () =>
+    runInternalSaveAction(
+      () => loadInternalRuntimeSaveMemoryFromDisk("save-ram"),
+      "SRAM cargada.",
+    );
+
+  const saveInternalSaveMemory = () =>
+    runInternalSaveAction(
+      () => saveInternalRuntimeMemoryToDisk("save-ram"),
+      "SRAM guardada.",
+    );
 
   const getGameplayHostRect = (): HostRect | null => {
     const gameplayElement = gameplayScreenRef.current;
@@ -340,13 +658,31 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     }));
   };
 
-  const updateEmulatorConfig = (config: EmulatorConfig) => {
+  const updateRuntimeConfig = async (config: RuntimeConfig) => {
+    if (!ensureInternalDebugLoopStopped("cambiar el runtime")) {
+      return;
+    }
+
+    const canContinue = await stopInternalRuntimeForAutosave(
+      "cambiar la configuracion",
+    );
+    if (!canContinue) {
+      return;
+    }
+
     void stopNativeCapture("Captura detenida");
     void hideOverlay();
     void undockCurrentGame();
+    setCapturedFrame(null);
+    setLiveFrame(null);
+    setCaptureSession(null);
+    setIsCaptureSessionRunning(false);
+    setDockedWindow(null);
+    setInternalFrameSnapshotBase64(null);
+    setInternalFrameInfo(null);
+    setInternalRuntimeStatus(null);
     setRunState((currentRun) => ({
-      ...currentRun,
-      emulatorConfig: config,
+      ...withRunRuntimeConfig(currentRun, config),
       captureWindow: undefined,
     }));
     setWindowStatus("Ventana de juego sin detectar");
@@ -541,6 +877,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const detectConfiguredWindow = async () => {
+    if (!ensureLegacyExternalRuntime()) {
+      return;
+    }
+
     const processId = emulatorConfig.lastLaunchedProcessId;
 
     if (!processId) {
@@ -552,6 +892,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const startGameSession = async () => {
+    if (!ensureLegacyExternalRuntime()) {
+      return;
+    }
+
     if (!hasEmulatorConfigured) {
       setSessionStatus("Configura el emulador para jugar");
       setIsEmulatorPanelOpen(true);
@@ -570,12 +914,11 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       );
 
       setRunState((currentRun) => ({
-        ...currentRun,
-        captureWindow: undefined,
-        emulatorConfig: {
+        ...withRunRuntimeConfig(currentRun, {
           ...emulatorConfig,
           lastLaunchedProcessId: result.processId ?? undefined,
-        },
+        }),
+        captureWindow: undefined,
       }));
 
       if (!result.processId) {
@@ -606,6 +949,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const startDockedSession = async () => {
+    if (!ensureLegacyExternalRuntime()) {
+      return;
+    }
+
     await stopNativeCapture("");
     await hideOverlay();
     setSessionStatus("Preparando modo acoplado...");
@@ -700,12 +1047,11 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
       );
 
       const dockedRunState: RunState = {
-        ...runState,
-        captureWindow: dockTargetWindow,
-        emulatorConfig: {
+        ...withRunRuntimeConfig(runState, {
           ...emulatorConfig,
           lastLaunchedProcessId,
-        },
+        }),
+        captureWindow: dockTargetWindow,
       };
 
       setDockedWindow(dockedInfo);
@@ -727,6 +1073,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const startOverlaySession = async () => {
+    if (!ensureLegacyExternalRuntime()) {
+      return;
+    }
+
     await stopNativeCapture("");
     setSessionStatus("Preparando modo overlay...");
     setOverlayStatus("Buscando mGBA abierto...");
@@ -837,12 +1187,11 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
 
       const layout = loadOverlayLayout();
       const overlayRunState: RunState = {
-        ...runState,
-        captureWindow,
-        emulatorConfig: {
+        ...withRunRuntimeConfig(runState, {
           ...emulatorConfig,
           lastLaunchedProcessId,
-        },
+        }),
+        captureWindow,
       };
 
       await runOverlayStep("Posicionando ventanas", async () => {
@@ -887,6 +1236,10 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const captureDetectedWindowFrame = async () => {
+    if (!ensureLegacyExternalRuntime()) {
+      return;
+    }
+
     if (!runState.captureWindow) {
       setFrameStatus("Detecta una ventana antes de capturar.");
       return;
@@ -898,38 +1251,55 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
 
   const chooseEmulator = async () => {
     try {
-      const selectedPath = await selectEmulatorExecutable();
-      if (selectedPath) {
-        updateEmulatorConfig({
-          ...emulatorConfig,
-          executablePath: selectedPath,
-        });
-      }
+      return await selectEmulatorExecutable();
     } catch {
       setSessionStatus("No se pudo abrir el selector del emulador.");
+      return null;
     }
   };
 
   const chooseRom = async () => {
     try {
-      const selectedPath = await selectRomFile();
-      if (selectedPath) {
-        updateEmulatorConfig({
-          ...emulatorConfig,
-          romPath: selectedPath,
-        });
-      }
+      return await selectRomFile();
     } catch {
       setSessionStatus("No se pudo abrir el selector de ROM.");
+      return null;
     }
   };
 
-  const resetRun = () => {
+  const chooseLibretroCore = async () => {
+    try {
+      return await selectLibretroCoreFile();
+    } catch {
+      setSessionStatus("No se pudo abrir el selector del core Libretro.");
+      return null;
+    }
+  };
+
+  const chooseSaveDirectory = async () => {
+    try {
+      return await selectSaveDirectory();
+    } catch {
+      setSessionStatus("No se pudo abrir el selector del directorio de guardado.");
+      return null;
+    }
+  };
+
+  const resetRun = async () => {
     const shouldReset = window.confirm(
       "¿Restablecer la run? Se perderán los cambios guardados localmente.",
     );
 
     if (!shouldReset) {
+      return;
+    }
+
+    if (!ensureInternalDebugLoopStopped("restablecer la run")) {
+      return;
+    }
+
+    const canContinue = await stopInternalRuntimeForAutosave("restablecer la run");
+    if (!canContinue) {
       return;
     }
 
@@ -940,15 +1310,29 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     setEditingSlotIndex(null);
     setCapturedFrame(null);
     setLiveFrame(null);
+    setInternalFrameSnapshotBase64(null);
+    setInternalFrameInfo(null);
+    setInternalRuntimeStatus(null);
     setRunState(cloneRunState(run));
     setSaveStatus("Guardado local");
     setWindowStatus("Ventana de juego sin detectar");
   };
 
-  const exitToCreateRun = () => {
+  const exitToCreateRun = async () => {
+    if (!ensureInternalDebugLoopStopped("salir de la run")) {
+      return;
+    }
+
+    const canContinue = await stopInternalRuntimeForAutosave("salir de la run");
+    if (!canContinue) {
+      return;
+    }
+
     void stopNativeCapture("Captura detenida");
     void hideOverlay();
     void undockCurrentGame();
+    setInternalFrameSnapshotBase64(null);
+    setInternalFrameInfo(null);
     onExit();
   };
 
@@ -964,6 +1348,58 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     hasSavedInitialRun.current = true;
     setSaveStatus("Guardado local");
   }, [runState]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let isDisposed = false;
+
+    void getCurrentWindow().onCloseRequested((event) => {
+      if (shouldCloseAfterInternalShutdownRef.current) {
+        return;
+      }
+
+      if (
+        !isInternalRuntimeRef.current ||
+        !isInternalNativeSessionActiveRef.current
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (isInternalShutdownInProgressRef.current) {
+        setSessionStatus("Guardando SRAM antes de cerrar...");
+        return;
+      }
+
+      void stopInternalRuntimeBeforeWindowClose();
+    }).then((nextUnlisten) => {
+      if (isDisposed) {
+        nextUnlisten();
+        return;
+      }
+
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      isDisposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (
+        isInternalRuntimeRef.current &&
+        isInternalNativeSessionActiveRef.current &&
+        !isInternalShutdownInProgressRef.current &&
+        !shouldCloseAfterInternalShutdownRef.current
+      ) {
+        void stopInternalRuntime();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -1021,6 +1457,39 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   }, [isOverlayEditing, runState.captureWindow, runState.lives, runState.captureStatus]);
 
   useEffect(() => {
+    if (isInternalRuntime) {
+      setCapturedFrame(null);
+      setLiveFrame(null);
+      setCaptureSession(null);
+      setIsCaptureSessionRunning(false);
+      setDockedWindow(null);
+      return;
+    }
+
+    if (!isInternalRuntime) {
+      setInternalFrameSnapshotBase64(null);
+      setInternalFrameInfo(null);
+      setInternalRuntimeStatus(null);
+      setIsInternalDebugLoopRunning(false);
+      setIsInternalDebugPanelCollapsed(false);
+    }
+  }, [isInternalRuntime]);
+
+  useEffect(() => {
+    if (!isInternalRuntime || hasInternalRuntimeConfigured) {
+      return;
+    }
+
+    if (autoOpenedInternalConfigKeyRef.current === internalConfigAutoOpenKey) {
+      return;
+    }
+
+    autoOpenedInternalConfigKeyRef.current = internalConfigAutoOpenKey;
+    setIsEmulatorPanelOpen(true);
+    setSessionStatus("Configura el runtime interno para empezar a jugar.");
+  }, [hasInternalRuntimeConfigured, internalConfigAutoOpenKey, isInternalRuntime]);
+
+  useEffect(() => {
     if (!isCaptureSessionRunning) {
       return;
     }
@@ -1075,7 +1544,15 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   }, []);
 
   return (
-    <main className="play-screen">
+    <main
+      className={
+        isInternalRuntime
+          ? isInternalDebugPanelCollapsed
+            ? "play-screen play-screen--internal play-screen--internal-playable play-screen--internal-debug-collapsed"
+            : "play-screen play-screen--internal play-screen--internal-playable"
+          : "play-screen"
+      }
+    >
       <header className="play-topbar">
         <div className="play-topbar__identity">
           <p className="eyebrow">Juego</p>
@@ -1084,88 +1561,108 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
         </div>
 
         <div className="play-topbar__actions">
-          <button
-            className={hasEmulatorConfigured ? "primary-button" : "secondary-button"}
-            type="button"
-            onClick={
-              hasEmulatorConfigured
-                ? startDockedSession
-                : () => setIsEmulatorPanelOpen(true)
-            }
-          >
-            {hasEmulatorConfigured ? "Jugar en modo acoplado" : "Configurar emulador"}
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={startOverlaySession}
-          >
-            Modo overlay
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={reacomodarDockedGame}
-          >
-            Reacomodar juego
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => void undockCurrentGame()}
-          >
-            Desacoplar juego
-          </button>
-          {isCaptureSessionRunning ? (
+          {isInternalRuntime ? (
             <button
-              className="secondary-button"
+              className={
+                hasInternalRuntimeConfigured ? "primary-button" : "secondary-button"
+              }
               type="button"
-              onClick={() => void stopNativeCapture("Captura detenida")}
+              onClick={() => setIsEmulatorPanelOpen(true)}
+              disabled={disableInternalDestructiveActions}
             >
-              Detener captura experimental
+              {hasInternalRuntimeConfigured
+                ? "Runtime interno configurado"
+                : "Configurar runtime interno"}
             </button>
           ) : (
             <button
-              className="secondary-button"
+              className={hasEmulatorConfigured ? "primary-button" : "secondary-button"}
               type="button"
-              onClick={startGameSession}
+              onClick={
+                hasEmulatorConfigured
+                  ? startDockedSession
+                  : () => setIsEmulatorPanelOpen(true)
+              }
             >
-              Modo captura experimental
+              {hasEmulatorConfigured ? "Jugar en modo acoplado" : "Configurar emulador"}
             </button>
           )}
-          <label className="fps-control">
-            <span>FPS</span>
-            <select
-              value={captureFps}
-              onChange={(event) => setCaptureFps(Number(event.target.value) as CaptureFps)}
-            >
-              {fpsOptions.map((fps) => (
-                <option key={fps} value={fps}>
-                  {fps} FPS
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={detectConfiguredWindow}
-          >
-            Detectar ventana
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={captureDetectedWindowFrame}
-          >
-            Capturar frame de prueba
-          </button>
+          {isLegacyRuntime ? (
+            <>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={startOverlaySession}
+              >
+                Modo overlay
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={reacomodarDockedGame}
+              >
+                Reacomodar juego
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void undockCurrentGame()}
+              >
+                Desacoplar juego
+              </button>
+              {isCaptureSessionRunning ? (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void stopNativeCapture("Captura detenida")}
+                >
+                  Detener captura experimental
+                </button>
+              ) : (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={startGameSession}
+                >
+                  Modo captura experimental
+                </button>
+              )}
+              <label className="fps-control">
+                <span>FPS</span>
+                <select
+                  value={captureFps}
+                  onChange={(event) => setCaptureFps(Number(event.target.value) as CaptureFps)}
+                >
+                  {fpsOptions.map((fps) => (
+                    <option key={fps} value={fps}>
+                      {fps} FPS
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={detectConfiguredWindow}
+              >
+                Detectar ventana
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={captureDetectedWindowFrame}
+              >
+                Capturar frame de prueba
+              </button>
+            </>
+          ) : null}
           <button
             className="secondary-button"
             type="button"
             onClick={() => setIsEmulatorPanelOpen(true)}
+            disabled={disableInternalDestructiveActions}
           >
-            Emulador
+            {isInternalRuntime ? "Runtime" : "Emulador"}
           </button>
           <button
             className="secondary-button"
@@ -1174,58 +1671,385 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           >
             Editar equipo
           </button>
-          <button className="secondary-button" type="button" onClick={resetRun}>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={resetRun}
+            disabled={disableInternalDestructiveActions}
+          >
             Restablecer run
           </button>
-          <button className="secondary-button" type="button" onClick={exitToCreateRun}>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={exitToCreateRun}
+            disabled={disableInternalDestructiveActions}
+          >
             Nueva run
           </button>
           <span className="save-status">{saveStatus}</span>
         </div>
       </header>
-      <section className="overlay-guidance" aria-label="Modo recomendado">
-        <strong>Modo recomendado</strong>
-        <span>ejecuta mGBA dentro del cuadro de juego, sin captura ni pérdida de rendimiento.</span>
-        <span>Haz click en el juego para controlar mGBA.</span>
-        <span>Haz click en los paneles para editar la run.</span>
+      <section className="overlay-guidance" aria-label="Modo de juego">
+        {isInternalRuntime ? (
+          <>
+            <strong>Modo interno Libretro</strong>
+            <span>El juego se inicia automaticamente con tu core local.</span>
+            <span>Haz click en el juego para activar teclado y audio.</span>
+            <span>Guarda dentro del juego antes de guardar SRAM.</span>
+          </>
+        ) : (
+          <>
+            <strong>Modo recomendado</strong>
+            <span>ejecuta mGBA dentro del cuadro de juego, sin captura ni pérdida de rendimiento.</span>
+            <span>Haz click en el juego para controlar mGBA.</span>
+            <span>Haz click en los paneles para editar la run.</span>
+          </>
+        )}
       </section>
 
+      {isInternalRuntime ? (
+        <section className="internal-play-layout" aria-label="Modo interno">
+          <GameplayFrame
+            gameName={runState.gameName}
+            routeName={runState.currentRoute.name}
+            capturedFrame={null}
+            liveFrame={null}
+            internalFrameSnapshotBase64={internalFrameSnapshotBase64}
+            internalFrameInfo={internalFrameInfo}
+            consoleProfile={consoleProfile}
+            isInternalRuntime
+            usesExternalInternalRenderer
+            onInternalCanvasReady={setInternalCanvas}
+            captureStatus={frameStatus}
+            isCapturing={false}
+            screenRef={gameplayScreenRef}
+            isKeyboardInputEnabled
+          />
+          <InternalPlaySidePanel
+            activeTab={internalPlayTab}
+            onTabChange={setInternalPlayTab}
+            teamPanel={
+              <TeamPanel team={runState.team} onEditSlot={setEditingSlotIndex} />
+            }
+            runPanel={
+              <div className="internal-run-controls">
+                <LivesCounter
+                  lives={runState.lives}
+                  onDecrease={() => updateLives(-1)}
+                  onIncrease={() => updateLives(1)}
+                />
+                <BadgePanel badges={runState.badges} onToggleBadge={toggleBadge} />
+                <LevelCapPanel
+                  levelCap={runState.levelCap}
+                  onChange={updateLevelCap}
+                />
+                <RoutePanel
+                  routeName={runState.currentRoute.name}
+                  onChange={updateRoute}
+                />
+                <CaptureStatusPanel
+                  status={runState.captureStatus}
+                  onCycle={cycleCaptureStatus}
+                />
+              </div>
+            }
+            runtimePanel={
+              <div className="internal-runtime-panel">
+                <section className="internal-runtime-panel__section">
+                  <div>
+                    <p className="eyebrow">Sesion</p>
+                    <h3>Runtime interno</h3>
+                  </div>
+                  <div className="internal-runtime-state-card">
+                    <strong>{internalSessionLabel}</strong>
+                    <span>{`FPS render: ${frameStatus || "esperando frame"}`}</span>
+                    <span>{runtimeConfig.corePath ? "Core configurado" : "Sin core"}</span>
+                    <span>{runtimeConfig.romPath ? "ROM configurada" : "Sin ROM"}</span>
+                    <span>{internalAudioStateLabel}</span>
+                  </div>
+                  <div className="internal-runtime-panel__actions">
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => void startInternalSession()}
+                      disabled={
+                        isInternalShutdownInProgress ||
+                        !hasInternalRuntimeConfigured ||
+                        isInternalNativeSessionActive
+                      }
+                    >
+                      Iniciar
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void pauseInternalSession()}
+                      disabled={
+                        isInternalShutdownInProgress ||
+                        !isInternalNativeSessionActive ||
+                        isInternalNativeSessionPaused
+                      }
+                    >
+                      Pausar
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void resumeInternalSession()}
+                      disabled={
+                        isInternalShutdownInProgress ||
+                        !isInternalNativeSessionActive ||
+                        !isInternalNativeSessionPaused
+                      }
+                    >
+                      Continuar
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void stopInternalSession()}
+                      disabled={
+                        isInternalShutdownInProgress ||
+                        !isInternalNativeSessionActive
+                      }
+                    >
+                      Detener
+                    </button>
+                  </div>
+                </section>
 
-      <section className="play-layout" aria-label="Diseño principal">
-        <GameplayFrame
-          gameName={runState.gameName}
-          routeName={runState.currentRoute.name}
-          capturedFrame={capturedFrame}
-          liveFrame={liveFrame}
-          captureStatus={frameStatus}
-          isCapturing={isCaptureSessionRunning}
-          screenRef={gameplayScreenRef}
-        />
-        <TeamPanel team={runState.team} onEditSlot={setEditingSlotIndex} />
-      </section>
+                <section className="internal-runtime-panel__section">
+                  <div>
+                    <p className="eyebrow">Audio</p>
+                    <h3>Sonido</h3>
+                  </div>
+                  <div className="internal-runtime-state-card">
+                    <strong>{internalAudioStateLabel}</strong>
+                    <span>Haz click en el juego para activar audio automaticamente.</span>
+                  </div>
+                  <div className="internal-runtime-panel__actions">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void toggleInternalAudio()}
+                      disabled={isInternalShutdownInProgress}
+                    >
+                      {internalAudioStateLabel === "Audio: activo"
+                        ? "Desactivar audio"
+                        : "Activar audio"}
+                    </button>
+                  </div>
+                </section>
+
+                <section className="internal-runtime-panel__section">
+                  <div>
+                    <p className="eyebrow">Controles</p>
+                    <h3>Teclado</h3>
+                  </div>
+                  <div className="internal-keyboard-status">
+                    <strong>
+                      {isInternalKeyboardFocused
+                        ? "Teclado activo"
+                        : "Haz click en el juego"}
+                    </strong>
+                    <span>
+                      Los controles solo funcionan cuando el cuadro de juego
+                      tiene foco. No se usan atajos globales.
+                    </span>
+                  </div>
+                  <div className="internal-controls-grid">
+                    {keyboardControlHints.map((hint) => (
+                      <div className="internal-controls-grid__row" key={hint.label}>
+                        <span className="internal-control-key">{hint.keys}</span>
+                        <span className="internal-control-action">
+                          {hint.action}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="internal-runtime-panel__actions">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void clearInternalHeldButtons()}
+                    >
+                      Soltar botones
+                    </button>
+                  </div>
+                </section>
+
+                <section className="internal-runtime-panel__section">
+                  <div>
+                    <p className="eyebrow">Guardado</p>
+                    <h3>SRAM</h3>
+                  </div>
+                  <p>
+                    Esto guarda la SRAM del juego. Primero guarda dentro de
+                    Pokemon desde el menu del juego. No es save state.
+                  </p>
+                  <div className="internal-runtime-state-card">
+                    <strong>
+                      {saveRamInfo
+                        ? `Disponible · ${saveRamInfo.sizeBytes} bytes`
+                        : "Pendiente de actualizar"}
+                    </strong>
+                    <span>
+                      {saveRamInfo?.existsOnDisk
+                        ? "Archivo .srm existente"
+                        : "Archivo .srm no encontrado"}
+                    </span>
+                    <span>
+                      {saveRamInfo?.filePath
+                        ? `Ubicacion: ${saveRamInfo.filePath}`
+                        : runtimeConfig.saveDirectory
+                          ? `Directorio configurado: ${runtimeConfig.saveDirectory}`
+                          : "Sin saveDirectory: se usara la carpeta de la ROM si el core reporta SRAM."}
+                    </span>
+                    {lastSaveOperation ? (
+                      <span>
+                        {`Ultima operacion: ${lastSaveOperation.message} ${
+                          lastSaveOperation.filePath
+                            ? lastSaveOperation.filePath
+                            : ""
+                        }`}
+                      </span>
+                    ) : null}
+                    {isInternalNativeSessionActive ? (
+                      <span>
+                        Deten la sesion para guardar o cargar SRAM manualmente.
+                        Al detener se intenta autosave.
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="internal-runtime-panel__actions">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void refreshInternalSaveMemory()}
+                      disabled={disableInternalSaveActions}
+                    >
+                      Actualizar memoria
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void loadInternalSaveMemory()}
+                      disabled={disableInternalSaveActions}
+                    >
+                      Cargar SRAM
+                    </button>
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => void saveInternalSaveMemory()}
+                      disabled={disableInternalSaveActions}
+                    >
+                      Guardar SRAM
+                    </button>
+                  </div>
+                </section>
+              </div>
+            }
+            debugController={
+              <InternalRuntimeFramePreview
+                ref={internalRuntimePreviewRef}
+                runtimeConfig={runtimeConfig}
+                onFrameSnapshotBase64={setInternalFrameSnapshotBase64}
+                onRuntimeStatusChange={applyInternalRuntimeStatus}
+                onAudioStateChange={setInternalAudioStateLabel}
+                onKeyboardFocusChange={setIsInternalKeyboardFocused}
+                onDebugLoopRunningChange={setIsInternalDebugLoopRunning}
+                onDebugPanelCollapsedChange={setIsInternalDebugPanelCollapsed}
+                isCollapsed={internalPlayTab !== "debug"}
+                showCollapseToggle={false}
+                keyboardTargetRef={gameplayScreenRef}
+              />
+            }
+          />
+          <InternalRuntimeDisplayController
+            canvas={internalCanvas}
+            isEnabled={isInternalRuntime && hasInternalRuntimeConfigured}
+            isSessionActive={isInternalNativeSessionActive}
+            onFrameInfo={setInternalFrameInfo}
+            onRenderStatus={setFrameStatus}
+          />
+        </section>
+      ) : (
+        <section className="play-layout" aria-label="Diseño principal">
+          <GameplayFrame
+            gameName={runState.gameName}
+            routeName={runState.currentRoute.name}
+            capturedFrame={capturedFrame}
+            liveFrame={liveFrame}
+            isInternalRuntime={false}
+            captureStatus={frameStatus}
+            isCapturing={isCaptureSessionRunning}
+            screenRef={gameplayScreenRef}
+          />
+          <TeamPanel team={runState.team} onEditSlot={setEditingSlotIndex} />
+        </section>
+      )}
 
       <div className="emulator-status" aria-live="polite">
-        <span>
-          {emulatorConfig.executablePath
-            ? "Emulador configurado"
-            : "Configura el emulador para jugar"}
-        </span>
-        <span>{emulatorConfig.romPath ? "ROM configurada" : "sin ROM"}</span>
-        <span>Ventana de juego: {windowStatus}</span>
-        <span>Overlay: {overlayStatus}</span>
-        {isCaptureSessionRunning ? (
+        {isInternalRuntime ? (
+          <>
+            <span>Runtime interno Libretro</span>
+            <span>{runtimeConfig.corePath ? "Core configurado" : "sin core"}</span>
+            <span>{runtimeConfig.romPath ? "ROM configurada" : "sin ROM"}</span>
+            <span>{`Sesion: ${internalSessionLabel.toLowerCase()}`}</span>
+            <span>{internalAudioStateLabel}</span>
+            {lastSaveOperation ? (
+              <span>{`Guardado: ${lastSaveOperation.message}`}</span>
+            ) : (
+              <span>
+                {saveRamInfo ? "SRAM disponible" : "SRAM pendiente"}
+              </span>
+            )}
+            <span>
+              {runtimeConfig.saveDirectory
+                ? "Directorio de guardado configurado"
+                : "sin directorio de guardado"}
+            </span>
+            {isInternalDebugLoopRunning ? (
+              <strong>
+                Prueba avanzada activa: detenla antes de cambiar runtime,
+                resetear o salir.
+              </strong>
+            ) : null}
+            {isInternalNativeSessionActive ? (
+              <strong>
+                Sesion interna activa: detenla antes de cambiar runtime,
+                resetear o salir.
+              </strong>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <span>
+              {emulatorConfig.executablePath
+                ? "Emulador configurado"
+                : "Configura el emulador para jugar"}
+            </span>
+            <span>{emulatorConfig.romPath ? "ROM configurada" : "sin ROM"}</span>
+            <span>Ventana de juego: {windowStatus}</span>
+            <span>Overlay: {overlayStatus}</span>
+          </>
+        )}
+        {isLegacyRuntime && isCaptureSessionRunning ? (
           <strong>{frameStatus || `Modo captura experimental a ${captureFps} FPS`}</strong>
         ) : null}
-        {captureSession?.isActive && captureSession.effectiveFps > 0 ? (
+        {isLegacyRuntime && captureSession?.isActive && captureSession.effectiveFps > 0 ? (
           <strong>{`${Math.round(captureSession.effectiveFps)} FPS reales`}</strong>
         ) : null}
-        {runState.captureWindow?.title ? (
+        {isLegacyRuntime && runState.captureWindow?.title ? (
           <strong>{runState.captureWindow.title}</strong>
         ) : null}
-        {frameStatus ? <strong>{frameStatus}</strong> : null}
+        {isLegacyRuntime && frameStatus ? <strong>{frameStatus}</strong> : null}
         {sessionStatus ? <strong>{sessionStatus}</strong> : null}
       </div>
 
+      {isLegacyRuntime ? (
       <footer className="status-bar" aria-label="Estado de la run">
         <LivesCounter
           lives={runState.lives}
@@ -1246,14 +2070,17 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
           onCycle={cycleCaptureStatus}
         />
       </footer>
+      ) : null}
 
       {isEmulatorPanelOpen ? (
         <EmulatorConfigPanel
-          config={emulatorConfig}
-          onChange={updateEmulatorConfig}
+          config={runtimeConfig}
+          onChange={updateRuntimeConfig}
           onClose={() => setIsEmulatorPanelOpen(false)}
           onSelectEmulator={chooseEmulator}
           onSelectRom={chooseRom}
+          onSelectCore={chooseLibretroCore}
+          onSelectSaveDirectory={chooseSaveDirectory}
         />
       ) : null}
 

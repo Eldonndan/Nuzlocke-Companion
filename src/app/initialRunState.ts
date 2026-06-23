@@ -24,8 +24,9 @@ export function createInitialRunState(): RunState {
     platform: "GBA",
     gameName: "Juego no seleccionado",
     challengeType: "Nuzlocke estándar",
-    emulatorConfig: {
-      type: "mgba",
+    runtimeConfig: {
+      mode: "legacy-external",
+      emulatorType: "mgba",
       executablePath: "",
       romPath: "",
       launchArgs: [],

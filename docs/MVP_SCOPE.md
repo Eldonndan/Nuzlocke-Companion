@@ -1,56 +1,35 @@
-\# MVP Scope
+# MVP Scope
 
+> Historical note: this scope describes the original manual companion MVP. The current accepted direction is documented in `docs/ADR-0001-product-direction.md`. Internal emulation is still not implemented, but the product direction is now a specialized Pokemon Nuzlocke emulation frontend. Current external emulator, capture, and overlay behavior remains legacy/experimental.
 
+## Built in the Current Prototype
 
-\## Build now
+- Tauri + React + TypeScript app.
+- Main play screen with polished layout.
+- Gameplay frame.
+- Team panel with 6 slots.
+- Manual team editing.
+- Life counter with heart + number.
+- Badge panel with 8 toggleable badges.
+- Level cap display and manual edit.
+- Current route display and manual edit.
+- Capture status toggle.
+- Basic local persistence.
+- External mGBA configuration.
+- Legacy docked mode, overlay mode, and experimental capture mode.
 
-\- Tauri + React + TypeScript app.
+## Still Not Built
 
-\- Main play screen with polished layout.
-
-\- Gameplay placeholder panel.
-
-\- Team panel with 6 slots.
-
-\- Manual team editing.
-
-\- Life counter with heart + number.
-
-\- Badge panel with 8 toggleable badges.
-
-\- Level cap display and manual edit.
-
-\- Current route display and manual edit.
-
-\- Capture status toggle.
-
-\- Basic local persistence.
-
-\- One layout: Classic Blue.
-
-
-
-\## Do not build yet
-
-\- Emulator capture.
-
-\- ROM loading.
-
-\- Save parsing.
-
-\- Lua bridge.
-
-\- OBS integration.
-
-\- Twitch/YouTube features.
-
-\- Death log.
-
-\- Box management.
-
-\- Item tracker.
-
-\- Timeline.
-
-\- Notes panel.
-
+- Internal Libretro runtime.
+- Internal ROM loading.
+- Internal video pipeline.
+- Internal audio pipeline.
+- Save management.
+- Save parsing.
+- Integrated randomizer.
+- DS/3DS support.
+- OBS integration.
+- Twitch/YouTube features.
+- Box management.
+- Item tracker.
+- Timeline.
