@@ -1,5 +1,6 @@
 import {
   createBadgesFromGamePack,
+  getGamePackById,
   getGamePackByGameName,
 } from "../data/gamePacks";
 import type {
@@ -17,6 +18,7 @@ import {
 export type CreateRunValues = {
   name: string;
   platform: string;
+  gameId?: string;
   gameName: string;
   challengeType: string;
   emulatorPath?: string;
@@ -29,12 +31,15 @@ export type CreateRunValues = {
 };
 
 export function createRunState(values: CreateRunValues): RunState {
-  const gamePack = getGamePackByGameName(values.gameName);
+  const gamePack = values.gameId
+    ? getGamePackById(values.gameId) ?? getGamePackByGameName(values.gameName)
+    : getGamePackByGameName(values.gameName);
 
   return {
     id: createRunId(),
     name: values.name.trim(),
     platform: values.platform,
+    gameId: values.gameId,
     gamePackId: gamePack?.id,
     gameName: values.gameName,
     challengeType: values.challengeType,

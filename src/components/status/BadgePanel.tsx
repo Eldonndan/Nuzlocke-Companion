@@ -1,4 +1,5 @@
 import type { Badge } from "../../shared/types";
+import { BadgeIcon } from "../visuals/BadgeIcon";
 
 type BadgePanelProps = {
   badges: Badge[];
@@ -14,7 +15,9 @@ export function BadgePanel({ badges, onToggleBadge }: BadgePanelProps) {
           <button
             aria-label={`${badge.name}: ${badge.obtained ? "obtenida" : "bloqueada"}`}
             aria-pressed={badge.obtained}
-            className={badge.obtained ? "badge-token badge-token--obtained" : "badge-token"}
+            className={
+              badge.obtained ? "badge-token badge-token--obtained" : "badge-token"
+            }
             key={badge.id}
             onClick={() => onToggleBadge(badge.id)}
             title={[
@@ -26,7 +29,15 @@ export function BadgePanel({ badges, onToggleBadge }: BadgePanelProps) {
               .join(" · ")}
             type="button"
           >
-            {index + 1}
+            {badge.iconKey ? (
+              <BadgeIcon
+                iconKey={badge.iconKey}
+                obtained={badge.obtained}
+                label={badge.name}
+              />
+            ) : (
+              index + 1
+            )}
           </button>
         ))}
       </div>
