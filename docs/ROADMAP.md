@@ -165,13 +165,17 @@ Deliverables:
 Status: Completed milestone.
 
 - Added a static Pokemon GB/GBC/GBA catalog.
-- Added local `gameId -> romPath` associations.
-- Added per-game ROM association and change flow through local pickers.
-- Added library cards with ROM pending/ready state.
-- Added original React/SVG/CSS cover, console, and badge visuals.
-- Added basic game packs by `gameId`.
-- Added run creation from selected games.
-- Added runtime preference reuse for core path and save directory.
+- Added local `gameId -> romPath` storage for user-selected ROM paths.
+- Added console filtering and original app-styled game cards.
+- Added grey pending cards for games without ROMs and active cards when a ROM is associated.
+- Hid full local ROM paths from the main library cards while preserving the stored association internally.
+- Added ROM assignment/change flow through the system file picker.
+- Added basic run setup with lives before creating the run.
+- Created internal Libretro runs from selected game metadata and associated ROM path.
+- Added local internal runtime preferences for `core`, `corePath`, and save directory reuse without storing a global ROM path.
+- Polished the library entry flow with a stronger hero, runtime readiness card, console tabs with counts, clearer ROM status cards, and a guided run setup summary.
+- Aligned the Pokemon catalog with basic run data by resolving game packs through stable `gameId` values and adding badge sets for every GB/GBC/GBA catalog game.
+- Added original SVG/CSS visuals for console icons, game cover cards, and themed badge icons without official assets.
 - Added QA documentation for manual validation.
 
 ## Future: Multi-Run Storage
