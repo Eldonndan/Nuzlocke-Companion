@@ -23,10 +23,8 @@ import { LivesCounter } from "../components/status/LivesCounter";
 import { RoutePanel } from "../components/status/RoutePanel";
 import { TeamPanel } from "../components/team/TeamPanel";
 import type {
-  Badge,
   CapturedFrame,
   CaptureSessionStatus,
-  CaptureStatus,
   CaptureWindow,
   DockedWindowInfo,
   HostRect,
@@ -90,6 +88,17 @@ import {
   isLegacyExternalRuntime,
   withRunRuntimeConfig,
 } from "../utils/runtimeConfig";
+import {
+  applyLivesDelta,
+  cycleRunCaptureStatus,
+  toggleRunBadge,
+  updateRunLevelCap,
+  updateRunRoute,
+} from "../utils/runStateActions";
+import {
+  applyOverlayRunAction,
+  isOverlayRunAction,
+} from "../utils/overlayActions";
 
 type MainPlayScreenProps = {
   run: RunState;
@@ -97,13 +106,6 @@ type MainPlayScreenProps = {
 };
 
 type CaptureFps = 30 | 60;
-
-const captureStatusOrder: CaptureStatus[] = [
-  "available",
-  "used",
-  "failed",
-  "not-applicable",
-];
 
 const fpsOptions: CaptureFps[] = [30, 60];
 const overlayLayoutStorageKey = "nuzlocke-companion.overlay-layout";
@@ -118,19 +120,6 @@ type OverlayLayout = {
   overlayWidth: number;
   overlayHeight: number;
 };
-
-function getNextLevelCap(badges: Badge[]) {
-  const badgesWithCaps = badges.filter(
-    (badge) => typeof badge.levelCap === "number",
-  );
-
-  if (badgesWithCaps.length === 0) {
-    return null;
-  }
-
-  const nextBadge = badgesWithCaps.find((badge) => !badge.obtained);
-  return nextBadge?.levelCap ?? badgesWithCaps[badgesWithCaps.length - 1].levelCap;
-}
 
 function wait(milliseconds: number) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
@@ -689,56 +678,23 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const updateLives = (delta: number) => {
-    setRunState((currentRun) => ({
-      ...currentRun,
-      lives: Math.max(0, currentRun.lives + delta),
-    }));
+    setRunState((currentRun) => applyLivesDelta(currentRun, delta));
   };
 
   const toggleBadge = (badgeId: string) => {
-    setRunState((currentRun) => {
-      const nextBadges = currentRun.badges.map((badge) =>
-        badge.id === badgeId ? { ...badge, obtained: !badge.obtained } : badge,
-      );
-
-      return {
-        ...currentRun,
-        badges: nextBadges,
-        levelCap: getNextLevelCap(nextBadges) ?? currentRun.levelCap,
-      };
-    });
+    setRunState((currentRun) => toggleRunBadge(currentRun, badgeId));
   };
 
   const updateLevelCap = (levelCap: number) => {
-    setRunState((currentRun) => ({
-      ...currentRun,
-      levelCap: Number.isFinite(levelCap)
-        ? Math.max(1, levelCap)
-        : currentRun.levelCap,
-    }));
+    setRunState((currentRun) => updateRunLevelCap(currentRun, levelCap));
   };
 
   const updateRoute = (routeName: string) => {
-    setRunState((currentRun) => ({
-      ...currentRun,
-      currentRoute: {
-        ...currentRun.currentRoute,
-        name: routeName,
-      },
-    }));
+    setRunState((currentRun) => updateRunRoute(currentRun, routeName));
   };
 
   const cycleCaptureStatus = () => {
-    setRunState((currentRun) => {
-      const currentIndex = captureStatusOrder.indexOf(currentRun.captureStatus);
-      const nextStatus =
-        captureStatusOrder[(currentIndex + 1) % captureStatusOrder.length];
-
-      return {
-        ...currentRun,
-        captureStatus: nextStatus,
-      };
-    });
+    setRunState((currentRun) => cycleRunCaptureStatus(currentRun));
   };
 
   const setOverlayEditMode = async (enabled: boolean) => {
@@ -781,28 +737,8 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
   };
 
   const applyOverlayAction = (action: OverlayAction) => {
-    if (action.type === "increase-lives") {
-      updateLives(1);
-      return;
-    }
-
-    if (action.type === "decrease-lives") {
-      updateLives(-1);
-      return;
-    }
-
-    if (action.type === "cycle-capture-status") {
-      cycleCaptureStatus();
-      return;
-    }
-
-    if (action.type === "set-route") {
-      updateRoute(action.routeName);
-      return;
-    }
-
-    if (action.type === "set-level-cap") {
-      updateLevelCap(action.levelCap);
+    if (isOverlayRunAction(action)) {
+      setRunState((currentRun) => applyOverlayRunAction(currentRun, action));
       return;
     }
 
@@ -2093,5 +2029,4 @@ export function MainPlayScreen({ run, onExit }: MainPlayScreenProps) {
     </main>
   );
 }
-
 
