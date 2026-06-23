@@ -1,6 +1,6 @@
 # Roadmap
 
-Nuzlocke Companion is migrating from an external emulator overlay/capture prototype toward a specialized Pokemon Nuzlocke emulation frontend. This roadmap prepares that shift without promising functionality before it exists.
+Nuzlocke Companion is a local-first desktop MVP for Pokemon Nuzlocke runs. The project has moved past the initial external emulator overlay/capture prototype and now has an internal Libretro runtime plus a Pokemon GB/GBC/GBA game library.
 
 ## Out of Initial Scope
 
@@ -13,6 +13,25 @@ Explicitly out of scope for the initial direction:
 - Advanced Twitch, OBS, or streaming automation.
 - Integrated randomizer.
 - Bundled ROMs, BIOS files, copyrighted assets, emulator binaries, or illegal game distribution.
+- Save states.
+- Physical gamepad support.
+
+## Completed MVP Milestones
+
+- Runtime model refactor with `legacy-external` and `internal-libretro` modes.
+- Playable internal Libretro MVP targeting mGBA for GB/GBC/GBA.
+- User-provided local core, ROM, and optional save directory setup.
+- Native-paced internal session start, pause, resume, and stop.
+- Internal gameplay rendering in the main gameplay frame.
+- Scoped keyboard input for internal gameplay.
+- SRAM battery-save load/save and autosave on runtime teardown.
+- Runtime preferences for mGBA core path and save directory.
+- Pokemon GB/GBC/GBA library flow.
+- Per-game local ROM association.
+- Game packs resolved by stable `gameId`.
+- Original SVG/CSS visuals for game covers, console icons, and badge icons.
+- Badge icon fallback for older runs without `iconKey`.
+- QA checklist for the game library flow.
 
 ## Phase 1: Documentation and Repo Preparation
 
@@ -31,13 +50,15 @@ Deliverables:
 - README direction note.
 - No runtime code changes.
 
+Status: Completed milestone.
+
 ## Phase 2: Runtime Model Refactor
 
 Objectives:
 
 - Replace the narrow `EmulatorConfig` concept with a runtime model that can represent multiple play modes.
 - Keep legacy external mGBA configuration supported.
-- Prepare a future internal Libretro mode without implementing it.
+- Prepare internal Libretro mode without deleting legacy external compatibility.
 
 Deliverables:
 
@@ -46,11 +67,13 @@ Deliverables:
 - Clear separation between run tracking state and runtime/emulation state.
 - Documentation of legacy external mode compatibility.
 
+Status: Completed milestone.
+
 ## Phase 3: Native Emulation Host Skeleton
 
 Objectives:
 
-- Create the Rust-side boundary for a future internal emulator host.
+- Create the Rust-side boundary for the internal emulator host.
 - Define commands/events for lifecycle, video, input, and save management.
 - Avoid loading real cores until the boundary is stable.
 
@@ -61,9 +84,10 @@ Deliverables:
 - Frontend service wrapper matching the future runtime API.
 - No Libretro dependency added yet unless the spike requires it later.
 
-Status:
+Status: Completed milestone.
 
 - Started with `src-tauri/src/emulation/` module boundaries and stub lifecycle commands.
+- Later runtime milestones implemented the playable internal Libretro path behind this boundary.
 
 ## Phase 4: Libretro Core Loading Spike
 
@@ -120,7 +144,7 @@ Status: Completed milestone.
 - Closed as the first stable playable internal Libretro runtime milestone.
 - Physical input, production audio pipelines, GPU/shared-memory rendering, and save states remain out of this milestone.
 
-## Next Block: Game Library / Pokemon Selection Flow
+## Completed: Game Library / Pokemon Selection Flow
 
 Objectives:
 
@@ -138,7 +162,7 @@ Deliverables:
 - Basic setup for lives and rules before entering the play screen.
 - Clear copy explaining that ROMs, BIOS files, and cores are not bundled or downloaded.
 
-Status:
+Status: Completed milestone.
 
 - Added a static Pokemon GB/GBC/GBA catalog.
 - Added local `gameId -> romPath` storage for user-selected ROM paths.
@@ -152,76 +176,67 @@ Status:
 - Polished the library entry flow with a stronger hero, runtime readiness card, console tabs with counts, clearer ROM status cards, and a guided run setup summary.
 - Aligned the Pokemon catalog with basic run data by resolving game packs through stable `gameId` values and adding badge sets for every GB/GBC/GBA catalog game.
 - Added original SVG/CSS visuals for console icons, game cover cards, and themed badge icons without official assets.
+- Added QA documentation for manual validation.
 
-Future work:
-
-- Folder scanning for ROMs.
-- ROM hash detection.
-- Detailed route data and route tracker integration.
-- Game-specific level caps.
-- Advanced rule presets.
-- User-provided custom cover art.
-- DS support.
-
-## Phase 5: Video Pipeline
+## Future: Multi-Run Storage
 
 Objectives:
 
-- Render emulator frames inside the app with stable pacing.
-- Choose the least fragile bridge between Rust and the React/Tauri UI.
-- Avoid using external window capture as the target path.
+- Support more than one saved run cleanly.
+- Let players select and continue previous runs from a dedicated screen.
+- Keep local-first storage simple and recoverable.
 
 Deliverables:
 
-- Internal frame transport design.
-- Prototype renderer in the gameplay frame.
-- Performance notes for GB/GBC/GBA.
-- Fallback behavior when the internal renderer is unavailable.
+- Multi-run persistence model.
+- "Mis runs" screen.
+- Run create/continue/delete flows.
+- Migration path for the current single-run storage.
 
-## Phase 6: Input Pipeline
+## Future: MainPlayScreen Refactor
 
 Objectives:
 
-- Route keyboard and controller input to the internal emulator host.
-- Keep UI controls responsive and avoid focus conflicts.
-- Prepare for remapping without building a full settings system first.
+- Reduce the size and responsibility of `MainPlayScreen`.
+- Keep runtime control, run tracking, and layout state separated.
+- Preserve the current player-facing behavior while improving maintainability.
 
 Deliverables:
 
-- Input event model.
-- Default mappings for GB/GBC/GBA play.
-- Focus rules between gameplay, edit panels, and app controls.
-- Basic controller discovery plan.
+- Smaller screen-level coordinator.
+- Runtime controller boundary.
+- Run tracking state hooks/utilities.
+- Focused components for team, route, capture, badges, and level cap.
 
-## Phase 7: Save Management
-
-Objectives:
-
-- Manage save files and emulator runtime data safely.
-- Keep user-owned game files separate from app-generated run files.
-- Prepare for future save parsing without implementing it prematurely.
-
-Deliverables:
-
-- Save directory strategy.
-- Per-run save metadata.
-- Import/export rules for user save files.
-- Clear policy for save states versus battery saves.
-
-## Phase 8: Gameplay Integration
+## Future: Advanced Nuzlocke Data
 
 Objectives:
 
-- Connect internal gameplay with Nuzlocke run tracking.
+- Make game-specific tracking richer without depending on ROM parsing.
 - Keep manual controls first.
-- Prepare later automation without making the app dependent on save parsing.
 
 Deliverables:
 
-- Runtime-aware play screen.
-- Run state displayed next to internal gameplay.
-- Manual update flows for team, deaths, captures, routes, badges, rules, and progress.
-- Data contracts for game packs and future richer Pokemon data.
+- Advanced level caps.
+- Rule presets.
+- Route tracker.
+- Expanded game pack metadata.
+- Optional richer Pokemon metadata.
+
+## Future: Input and Runtime Polish
+
+Objectives:
+
+- Improve normal play comfort while keeping the current runtime scope clear.
+- Avoid adding broad emulator features before the Nuzlocke app flow is stable.
+
+Deliverables:
+
+- Optional physical gamepad support.
+- Input rebinding.
+- Production audio pipeline.
+- More efficient frame transport if needed.
+- Save states only if the project explicitly decides to add them later; they remain outside current scope.
 
 ## Phase 9: Alpha Release
 
@@ -234,6 +249,7 @@ Objectives:
 Deliverables:
 
 - Internal GB/GBC/GBA play path if validated.
+- Pokemon GB/GBC/GBA library as the primary run creation flow.
 - Stable manual run tracking.
 - Local-only persistence.
 - Basic save management.

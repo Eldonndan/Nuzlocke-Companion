@@ -6,7 +6,7 @@ This document describes the current external emulator prototype. It is retained 
 
 The previous recommended flow was `Modo acoplado`: launch or find mGBA, detect its window, and dock the real mGBA window inside the Nuzlocke Companion gameplay frame.
 
-That path remains useful as a fallback and testing mode, but it is no longer the target product direction. The target direction is internal emulation hosted by Nuzlocke Companion, initially focused on GB/GBC/GBA and mGBA via Libretro research.
+That path remains useful as a fallback and testing mode, but it is no longer the target product direction. The main product direction is internal emulation hosted by Nuzlocke Companion, initially focused on GB/GBC/GBA with a user-provided mGBA Libretro core.
 
 ## What Legacy Docked Mode Does
 
