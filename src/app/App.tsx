@@ -10,11 +10,12 @@ import {
   loadRunLibrary,
   setActiveRunId,
 } from "../utils/runLibraryStorage";
-import { hasSavedRun, saveRun } from "../utils/runStorage";
+import { hasSavedRun, loadSavedRun, saveRun } from "../utils/runStorage";
 
 export function App() {
   const [screen, setScreen] = useState<AppScreen>("home");
   const run = useMemo(() => sampleRun, []);
+  const [activeRun, setActiveRun] = useState<RunState | null>(null);
   const [runLibrary, setRunLibrary] = useState(() =>
     ensureCurrentRunInLibrary(sampleRun),
   );
@@ -22,6 +23,7 @@ export function App() {
 
   const createRun = (newRun: RunState) => {
     saveRun(newRun);
+    setActiveRun(newRun);
     refreshRunLibrary();
     setScreen("play");
   };
@@ -29,6 +31,16 @@ export function App() {
   const continueRun = (selectedRun: RunState) => {
     setActiveRunId(selectedRun.id);
     saveRun(selectedRun);
+    setActiveRun(selectedRun);
+    refreshRunLibrary();
+    setScreen("play");
+  };
+
+  const continueCurrentRun = () => {
+    const savedRun = loadSavedRun(sampleRun);
+
+    saveRun(savedRun);
+    setActiveRun(savedRun);
     refreshRunLibrary();
     setScreen("play");
   };
@@ -64,14 +76,23 @@ export function App() {
   }
 
   if (screen === "play") {
-    return <MainPlayScreen run={run} onExit={() => setScreen("create-run")} />;
+    return (
+      <MainPlayScreen
+        run={activeRun ?? run}
+        onExit={() => {
+          refreshRunLibrary();
+          setActiveRun(null);
+          setScreen("create-run");
+        }}
+      />
+    );
   }
 
   return (
     <HomeScreen
       hasSavedRun={hasSavedRun()}
       hasRunLibrary={runLibrary.runs.length > 0}
-      onContinueRun={() => setScreen("play")}
+      onContinueRun={continueCurrentRun}
       onCreateRun={() => setScreen("create-run")}
       onOpenMyRuns={() => {
         refreshRunLibrary();
