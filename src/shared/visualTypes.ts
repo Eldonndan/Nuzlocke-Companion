@@ -1,0 +1,17 @@
+export type BadgeIconKey =
+  | "rock"
+  | "water"
+  | "electric"
+  | "grass"
+  | "poison"
+  | "psychic"
+  | "fire"
+  | "earth"
+  | "flying"
+  | "bug"
+  | "normal"
+  | "ghost"
+  | "fighting"
+  | "steel"
+  | "ice"
+  | "dragon";

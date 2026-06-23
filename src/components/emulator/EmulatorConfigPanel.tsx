@@ -5,6 +5,12 @@ import type {
 } from "../../shared/types";
 import { useState } from "react";
 import {
+  applyInternalRuntimePreferencesToConfig,
+  clearInternalRuntimePreferences,
+  loadInternalRuntimePreferences,
+  saveInternalRuntimePreferences,
+} from "../../utils/internalRuntimePreferences";
+import {
   createDefaultInternalLibretroRuntimeConfig,
   createDefaultLegacyExternalRuntimeConfig,
   isInternalLibretroRuntime,
@@ -44,13 +50,13 @@ function toLegacyConfig(config: RuntimeConfig): LegacyExternalRuntimeConfig {
 
 function toInternalConfig(config: RuntimeConfig): InternalLibretroRuntimeConfig {
   if (isInternalLibretroRuntime(config)) {
-    return normalizeInternalLibretroRuntimeConfig(config);
+    return applyInternalRuntimePreferencesToConfig(config);
   }
 
-  return {
+  return applyInternalRuntimePreferencesToConfig({
     ...createDefaultInternalLibretroRuntimeConfig(),
     romPath: config.romPath,
-  };
+  });
 }
 
 export function EmulatorConfigPanel({
@@ -63,6 +69,9 @@ export function EmulatorConfigPanel({
   onClose,
 }: EmulatorConfigPanelProps) {
   const [panelMessage, setPanelMessage] = useState("");
+  const [savedPreferences, setSavedPreferences] = useState(() =>
+    loadInternalRuntimePreferences(),
+  );
   const isLegacyMode = isLegacyExternalRuntime(config);
   const isInternalMode = isInternalLibretroRuntime(config);
   const legacyConfig = toLegacyConfig(config);
@@ -130,8 +139,23 @@ export function EmulatorConfigPanel({
       return;
     }
 
+    saveInternalRuntimePreferences({
+      core: "mgba",
+      corePath: internalConfig.corePath,
+      saveDirectory: internalConfig.saveDirectory,
+    });
+    onChange(normalizeInternalLibretroRuntimeConfig(internalConfig));
+    setSavedPreferences(loadInternalRuntimePreferences());
     setPanelMessage("Configuracion lista. Iniciando juego...");
     onClose?.();
+  };
+
+  const forgetInternalPreferences = () => {
+    clearInternalRuntimePreferences();
+    setSavedPreferences(null);
+    setPanelMessage(
+      "Preferencias locales olvidadas. Esta run mantiene su configuracion actual.",
+    );
   };
 
   const updateLaunchArgs = (value: string) => {
@@ -299,6 +323,20 @@ export function EmulatorConfigPanel({
                 run cuando guardes una configuracion completa.
               </span>
             </div>
+            {savedPreferences ? (
+              <div className="internal-runtime-preferences">
+                <span>
+                  Usando configuracion local guardada para el runtime interno.
+                </span>
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={forgetInternalPreferences}
+                >
+                  Olvidar preferencias
+                </button>
+              </div>
+            ) : null}
             <ol className="internal-setup-steps">
               {internalSetupSteps.map((step) => (
                 <li
