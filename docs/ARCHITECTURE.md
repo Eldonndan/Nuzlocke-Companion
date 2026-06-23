@@ -1,6 +1,25 @@
 # Architecture
 
-Nuzlocke Companion is a Tauri desktop app with a React and TypeScript frontend and a Rust native layer. The current repository is a working prototype for a player-facing Nuzlocke layout plus external mGBA integration. The target architecture moves the project toward an internal emulation frontend specialized for Pokemon Nuzlocke runs.
+Nuzlocke Companion is a Tauri desktop app with a React and TypeScript frontend and a Rust native layer. The current repository is a working MVP for a player-facing Nuzlocke layout with an internal Libretro runtime and a legacy external mGBA fallback.
+
+## Current Product Status
+
+The app now has two runtime paths:
+
+- `internal-libretro`: the main direction. It loads a user-provided mGBA Libretro core and user-provided GB/GBC/GBA ROMs, renders gameplay inside the app, supports scoped keyboard input, and persists battery SRAM.
+- `legacy-external`: fallback path for launching/docking/capturing an external mGBA window.
+
+New library-created runs default to the internal Libretro runtime. Legacy external mode remains available for compatibility and fallback testing.
+
+## Pokemon Game Library
+
+The library flow is now the primary run creation path. It uses:
+
+- A static app-owned Pokemon GB/GBC/GBA catalog.
+- Local `gameId -> romPath` associations.
+- Runtime preferences for core path and save directory.
+- Game packs resolved by stable `gameId`.
+- Original React/SVG/CSS visuals only.
 
 ## Current Architecture
 
@@ -8,7 +27,7 @@ Nuzlocke Companion is a Tauri desktop app with a React and TypeScript frontend a
 
 The frontend owns the visible play experience:
 
-- Home and create-run screens.
+- Home, game library, and create-run screens.
 - Main play screen.
 - Gameplay frame.
 - Team panel.
@@ -35,7 +54,7 @@ The useful product base is the run tracking model: team, lives, badges, route, l
 
 ### External Emulator Bridge
 
-The current `EmulatorConfig` model assumes an external mGBA executable and a local ROM path. The frontend calls Tauri commands through `src/utils/emulatorCommands.ts`.
+The legacy `EmulatorConfig` model assumes an external mGBA executable and a local ROM path. The frontend calls Tauri commands through `src/utils/emulatorCommands.ts`.
 
 Rust commands in `src-tauri/src/lib.rs` currently handle:
 
@@ -55,11 +74,11 @@ There are two secondary paths:
 - Overlay mode: a transparent Tauri window at `index.html?overlay=1`, with click-through support and global hotkeys.
 - Capture mode: GDI still capture and Windows Graphics Capture frame streaming into the WebView.
 
-These paths are useful for learning and fallback behavior, but they are no longer the target product architecture.
+These paths are useful for fallback behavior, but they are no longer the target product architecture.
 
 ## Target Architecture
 
-The target product is a specialized Pokemon Nuzlocke emulation frontend. It should host gameplay inside the app and place Nuzlocke state next to it.
+The target product is a specialized Pokemon Nuzlocke emulation frontend. It now hosts GB/GBC/GBA gameplay inside the app and places Nuzlocke state next to it.
 
 ### React UI
 
@@ -86,7 +105,7 @@ Tauri remains the desktop shell:
 
 ### Rust Native Emulation Host
 
-The Rust layer should become the internal emulation host:
+The Rust layer owns the internal emulation host:
 
 - Runtime lifecycle: create, load, run, pause, reset, stop.
 - Core lifecycle: load core, unload core, report core capabilities.
@@ -96,7 +115,7 @@ The Rust layer should become the internal emulation host:
 - Input handling.
 - Save and runtime data management.
 
-This host should expose a stable command/event API to the frontend. It should be designed so legacy external mode and target internal mode can coexist temporarily.
+This host exposes a command/event API to the frontend. It is designed so legacy external mode and internal Libretro mode can coexist temporarily.
 
 ### Libretro Core
 
@@ -113,7 +132,7 @@ Run tracking should be separated from runtime execution:
 - Game pack data: game identity, platform, routes, badges, level caps, and future Pokemon metadata.
 - Persistence: local-first, per-run storage.
 
-This separation is the next major refactor. `EmulatorConfig` should evolve into a general runtime configuration that can represent both legacy external mode and future internal Libretro mode.
+This separation is in progress. `RuntimeConfig` now represents both legacy external mode and internal Libretro mode, while old `EmulatorConfig` data remains available for local-save compatibility.
 
 ### Runtime Model
 
@@ -122,18 +141,18 @@ The code now uses `RuntimeConfig` as the forward-compatible runtime configuratio
 Supported runtime modes:
 
 - `legacy-external`: the current mode. It launches or detects an external mGBA process, can dock the mGBA window, can show the overlay, and can use experimental window capture.
-- `internal-libretro`: the future mode. It will load a Libretro core inside Nuzlocke Companion and render gameplay in the app. This mode is represented in types only and is not implemented yet.
+- `internal-libretro`: the primary mode. It loads a user-provided Libretro core and user-provided ROM, renders gameplay in the app, supports scoped keyboard input, and persists battery SRAM.
 
 `RunState.runtimeConfig` is the preferred field for new and migrated runs. `RunState.emulatorConfig` remains temporarily as a deprecated compatibility field for old local saves and current legacy external UI components.
 
-The migration path is gradual:
+The compatibility path is gradual:
 
 1. New runs store `runtimeConfig`.
 2. Old runs with only `emulatorConfig` are interpreted as `legacy-external`.
-3. Legacy external code remains available while the internal Libretro host is designed.
-4. Future work can add the native emulation host without deleting the fallback mode first.
+3. Library-created runs use internal Libretro configuration.
+4. Legacy external code remains available while the internal runtime matures.
 
-### Internal Emulation Host Skeleton
+### Internal Emulation Host Skeleton Milestone
 
 The native host skeleton now lives under `src-tauri/src/emulation/`.
 
@@ -145,9 +164,9 @@ Current modules:
 - `libretro_host.rs`: placeholder for future Libretro core loading and lifecycle.
 - `video.rs`, `audio.rs`, `input.rs`, `saves.rs`: placeholders for future emulator subsystems.
 
-This skeleton does not load Libretro, does not open cores, does not open ROMs, does not render video, and does not output audio. It only defines the command/state boundary needed for the next implementation step.
+This was an early milestone that defined the command/state boundary before the playable runtime was implemented.
 
-The next technical step is a dynamic loader spike for the mGBA Libretro core, kept behind this internal host boundary.
+Later milestones added Libretro loading, ROM loading, frame execution, rendering, input, SRAM persistence, autosave, and a native-paced session loop behind this boundary.
 
 ### Libretro Core Loading Spike
 
@@ -470,7 +489,7 @@ The former Debug tab is labeled Avanzado and keeps manual setup, frame stepping,
 
 Internal keyboard input remains scoped to the gameplay frame and the internal runtime panel. There are no global keyboard listeners. The Runtime tab now shows the current mapping for D-pad, A/B, Start, Select, L/R, and X/Y, plus whether the gameplay frame currently has keyboard focus.
 
-The UI exposes a "Soltar botones" action to clear retained Joypad state if focus is lost at an awkward moment. This prepares the UX surface for future rebinding or physical gamepad support, but those features are intentionally not implemented yet.
+The UI exposes a "Soltar botones" action to clear retained Joypad state if focus is lost at an awkward moment. This prepares the UX surface for future rebinding or physical gamepad support, but those features remain future work.
 
 ### Internal Runtime Close Protection
 
@@ -499,7 +518,7 @@ These should remain separate from emulator execution and local save management.
 
 ## Legacy External Emulator Mode
 
-The current external emulator mode can remain temporarily as a fallback while internal emulation is explored.
+The legacy external emulator mode remains available as a fallback while internal emulation is the main product direction.
 
 Legacy external mode includes:
 
@@ -537,11 +556,12 @@ Recommended future module boundaries:
 
 These boundaries are conceptual for now. This documentation change does not implement them.
 
-## Non-Goals for the Current Preparation Work
+## Current Non-Goals
 
-- No Libretro implementation.
-- No new dependencies.
-- No ROM loading inside the app.
-- No behavior change.
-- No large refactor.
-- No deletion of the current external emulator, capture, or overlay code.
+- No bundled ROMs, BIOS files, cores, official artwork, sprites, logos, or copyrighted game assets.
+- No DS or 3DS runtime support.
+- No save states.
+- No physical gamepad support.
+- No automatic ROM folder scanning.
+- No hash-based ROM detection.
+- No deletion of the legacy external emulator, capture, or overlay fallback code.

@@ -70,9 +70,9 @@ These paths can remain temporarily as a fallback while the internal runtime dire
 - Separating Pokemon-specific run tracking from emulator-core-agnostic runtime concerns.
 - Avoiding scope creep into a full emulator distribution.
 
-## Not Implemented Yet
+## Initial Non-Goals
 
-This ADR does not implement:
+At the time this ADR was accepted, it did not implement:
 
 - Libretro core loading.
 - Bundled mGBA or any other emulator core.
@@ -88,4 +88,4 @@ This ADR does not implement:
 - DS or 3DS support.
 - Twitch, OBS, or advanced streaming integrations.
 
-The next practical step is to refactor the current `EmulatorConfig` concept into a more general runtime model that can describe both the legacy external emulator mode and the future internal Libretro mode.
+The runtime model refactor and playable internal Libretro MVP were completed in later milestones. The project still does not bundle mGBA, ROMs, BIOS files, official assets, DS/3DS support, save states, multiplayer, randomizer integration, or advanced streaming integrations.
