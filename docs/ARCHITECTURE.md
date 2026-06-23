@@ -134,6 +134,17 @@ Run tracking should be separated from runtime execution:
 
 This separation is in progress. `RuntimeConfig` now represents both legacy external mode and internal Libretro mode, while old `EmulatorConfig` data remains available for local-save compatibility.
 
+### Run Storage
+
+The app currently keeps the active play flow compatible with the original single-run storage key:
+
+- `nuzlocke-companion.current-run`: current compatibility path used by `loadSavedRun`, `saveRun`, and `clearSavedRun`.
+- `nuzlocke-companion.run-library.v1`: versioned local run library for future multi-run UI work.
+
+`saveRun` still writes the current run to `current-run`, and now also upserts that run into the versioned run library. `loadSavedRun` still reads only `current-run`, so the current app flow does not change. `clearSavedRun` removes only `current-run` and does not clear the multi-run library.
+
+The run library validates stored entries before use and clears only its own versioned key if corrupted. There is no automatic migration from `current-run` into the library yet; that migration should be paired with a later user-facing "Mis runs" flow.
+
 ### Runtime Model
 
 The code now uses `RuntimeConfig` as the forward-compatible runtime configuration model.
