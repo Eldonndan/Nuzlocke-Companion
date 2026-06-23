@@ -1,6 +1,6 @@
 import type { BadgeIconKey } from "./visualTypes";
 
-export type AppScreen = "home" | "create-run" | "play";
+export type AppScreen = "home" | "create-run" | "my-runs" | "play";
 
 export type CaptureStatus = "available" | "used" | "failed" | "not-applicable";
 

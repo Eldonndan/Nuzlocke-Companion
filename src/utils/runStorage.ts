@@ -43,3 +43,26 @@ export function hasSavedRun() {
 export function clearSavedRun() {
   window.localStorage.removeItem(RUN_STORAGE_KEY);
 }
+
+export function clearCurrentRunIfMatches(runId: string): void {
+  try {
+    const savedRun = window.localStorage.getItem(RUN_STORAGE_KEY);
+
+    if (!savedRun) {
+      return;
+    }
+
+    const parsedRun: unknown = JSON.parse(savedRun);
+
+    if (!isRunState(parsedRun)) {
+      window.localStorage.removeItem(RUN_STORAGE_KEY);
+      return;
+    }
+
+    if (parsedRun.id === runId) {
+      window.localStorage.removeItem(RUN_STORAGE_KEY);
+    }
+  } catch {
+    window.localStorage.removeItem(RUN_STORAGE_KEY);
+  }
+}

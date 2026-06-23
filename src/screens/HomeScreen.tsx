@@ -1,13 +1,17 @@
 type HomeScreenProps = {
   onCreateRun: () => void;
   onContinueRun: () => void;
+  onOpenMyRuns: () => void;
   hasSavedRun: boolean;
+  hasRunLibrary: boolean;
 };
 
 export function HomeScreen({
   onCreateRun,
   onContinueRun,
+  onOpenMyRuns,
   hasSavedRun,
+  hasRunLibrary,
 }: HomeScreenProps) {
   return (
     <main className="home-screen">
@@ -21,6 +25,11 @@ export function HomeScreen({
           {hasSavedRun ? (
             <button className="primary-button" type="button" onClick={onContinueRun}>
               Continuar run
+            </button>
+          ) : null}
+          {hasRunLibrary ? (
+            <button className="secondary-button" type="button" onClick={onOpenMyRuns}>
+              Mis runs
             </button>
           ) : null}
           <button className="secondary-button" type="button" onClick={onCreateRun}>

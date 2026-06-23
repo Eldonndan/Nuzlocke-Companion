@@ -54,6 +54,15 @@ ROM associations are per game. A ROM selected for one game is not used as a glob
 
 New library-created runs use the internal Libretro runtime by default. Legacy external mGBA mode remains available as a fallback for older runs and compatibility testing.
 
+## Continue or Delete a Run
+
+Open `Mis runs` from the home screen or the run creation screen to view locally saved runs.
+
+- Use `Continuar` to make a saved run the current run and enter the play screen.
+- Use `Eliminar` to remove a run from the local run library after confirmation.
+
+Deleting a run from `Mis runs` does not delete ROMs, BIOS files, cores, or battery-save files. The app still keeps `current-run` compatibility for the active flow.
+
 ## SRAM Battery Saves
 
 Nuzlocke Companion supports Libretro battery SRAM persistence.
